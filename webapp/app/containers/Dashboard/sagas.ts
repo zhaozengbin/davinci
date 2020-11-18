@@ -18,159 +18,112 @@
  * >>
  */
 
-import { call, all, put, takeLatest, takeEvery } from 'redux-saga/effects'
-
 import {
-  LOAD_DASHBOARDS,
-  ADD_DASHBOARD,
-  EDIT_DASHBOARD,
-  EDIT_CURRENT_DASHBOARD,
-  DELETE_DASHBOARD,
-  LOAD_DASHBOARD_DETAIL,
-  ADD_DASHBOARD_ITEMS,
-  EDIT_DASHBOARD_ITEM,
-  EDIT_DASHBOARD_ITEMS,
-  DELETE_DASHBOARD_ITEM,
-  LOAD_DASHBOARD_SHARE_LINK,
-  LOAD_WIDGET_SHARE_LINK,
-  LOAD_WIDGET_CSV
-} from './constants'
-
+  call,
+  all,
+  put,
+  fork,
+  select,
+  takeLatest,
+  takeEvery
+} from 'redux-saga/effects'
+import omit from 'lodash/omit'
+import { ActionTypes } from './constants'
+import { DashboardActions, DashboardActionType } from './actions'
 import {
-  dashboardsLoaded,
-  loadDashboardsFail,
-  dashboardAdded,
-  addDashboardFail,
-  dashboardEdited,
-  editDashboardFail,
-  currentDashboardEdited,
-  editCurrentDashboardFail,
-  dashboardDeleted,
-  deleteDashboardFail,
-  dashboardDetailLoaded,
-  loadDashboardDetailFail,
-  dashboardItemsAdded,
-  addDashboardItemsFail,
-  dashboardItemEdited,
-  editDashboardItemFail,
-  dashboardItemsEdited,
-  editDashboardItemsFail,
-  dashboardItemDeleted,
-  deleteDashboardItemFail,
-  dashboardShareLinkLoaded,
-  dashboardSecretLinkLoaded,
-  widgetSecretLinkLoaded,
-  loadDashboardShareLinkFail,
-  widgetShareLinkLoaded,
-  loadWidgetShareLinkFail,
-  widgetCsvLoaded,
-  loadWidgetCsvFail
-} from './actions'
-
+  makeSelectCurrentDashboard,
+  makeSelectWidgets,
+  makeSelectItemRelatedWidget,
+  makeSelectItemInfo,
+  makeSelectCurrentItems
+} from './selectors'
+import {
+  makeSelectGlobalControlPanelFormValues,
+  makeSelectLocalControlPanelFormValues
+} from 'containers/ControlPanel/selectors'
+import { makeSelectFormedViews } from '../View/selectors'
+import {
+  getRequestParams,
+  getRequestBody,
+  getCurrentControlValues,
+  getUpdatedPagination,
+  getInitialPagination
+} from './util'
+import {
+  IDashboardDetailRaw,
+  IDashboardConfig,
+  IDashboardItemInfo,
+  IDashboard,
+  IQueryConditions,
+  IDataDownloadStatistic
+} from './types'
+import {
+  IGlobalControlConditionsByItem,
+  IGlobalControlConditions,
+  ILocalControlConditions
+} from 'app/components/Control/types'
+import { IWidgetFormed } from '../Widget/types'
+import { IFormedViews } from '../View/types'
+import { DownloadTypes } from '../App/constants'
+import { dashboardConfigMigrationRecorder } from 'app/utils/migrationRecorders'
+import { ControlPanelTypes } from 'app/components/Control/constants'
+import { RenderType } from '../Widget/components/Widget'
+import { CancelTokenSource } from 'axios'
 import request from 'utils/request'
-import { errorHandler } from 'utils/util'
+import { errorHandler, getErrorMessage } from 'utils/util'
+import { message } from 'antd'
 import api from 'utils/api'
-import config, { env } from 'app/globalConfig'
-const shareHost = config[env].shareHost
-
-export function* getDashboards (action) {
-  const { payload } = action
-  try {
-    const dashboards = yield call(request, `${api.portal}/${payload.portalId}/dashboards`)
-    yield put(dashboardsLoaded(dashboards.payload))
-    payload.resolve(dashboards.payload)
-  } catch (err) {
-    yield put(loadDashboardsFail())
-    errorHandler(err)
+import { operationWidgetProps } from 'components/DataDrill/abstract/widgetOperating'
+export function* getDashboardDetail(action: DashboardActionType) {
+  if (action.type !== ActionTypes.LOAD_DASHBOARD_DETAIL) {
+    return
   }
-}
+  const { dashboardDetailLoaded, loadDashboardDetailFail } = DashboardActions
+  const { portalId, dashboardId } = action.payload
 
-export function* addDashboard (action) {
-  const { payload } = action
-  const { dashboard, resolve } = payload
   try {
-    const asyncData = yield call(request, {
-      method: 'post',
-      url: `${api.portal}/${dashboard.dashboardPortalId}/dashboards`,
-      data: dashboard
-    })
-    yield put(dashboardAdded(asyncData.payload))
-    resolve(asyncData.payload.id)
-  } catch (err) {
-    yield put(addDashboardFail())
-    errorHandler(err)
-  }
-}
+    const result = yield call(
+      request,
+      `${api.portal}/${portalId}/dashboards/${dashboardId}`
+    )
 
-export function* editDashboard (action) {
-  const { payload } = action
-  const { formType, dashboard, resolve } = payload
-  try {
-    yield call(request, {
-      method: 'put',
-      url: `${api.portal}/${dashboard[0].dashboardPortalId}/dashboards`,
-      data: dashboard
-    })
-    yield put(dashboardEdited(dashboard, formType))
-    resolve(dashboard)
-  } catch (err) {
-    yield put(editDashboardFail())
-    errorHandler(err)
-  }
-}
-
-export function* editCurrentDashboard (action) {
-  const { dashboard, resolve } = action.payload
-  try {
-    yield call(request, {
-      method: 'put',
-      url: `${api.portal}/${dashboard.dashboardPortalId}/dashboards`,
-      data: [dashboard]
-    })
-    yield put(currentDashboardEdited(dashboard))
-    resolve()
-  } catch (err) {
-    yield put(editCurrentDashboardFail())
-    errorHandler(err)
-  }
-}
-
-export function* deleteDashboard (action) {
-  const { payload } = action
-  try {
-    yield call(request, {
-      method: 'delete',
-      url: `${api.portal}/dashboards/${payload.id}`
-    })
-    yield put(dashboardDeleted(payload.id))
-    if (payload.resolve) {
-      payload.resolve()
+    const {
+      relations: items,
+      views,
+      config,
+      ...rest
+    } = result.payload as IDashboardDetailRaw
+    const parsedConfig: IDashboardConfig = JSON.parse(config || '{}')
+    const dashboard = {
+      ...rest,
+      config: dashboardConfigMigrationRecorder(parsedConfig)
     }
-  } catch (err) {
-    yield put(deleteDashboardFail())
-    errorHandler(err)
-  }
-}
 
-export function* getDashboardDetail (action) {
-  const { payload } = action
-  const { projectId, portalId, dashboardId } = payload
+    const widgets: IWidgetFormed[] = yield select(makeSelectWidgets())
 
-  try {
-    const result = yield all({
-      dashboardDetail: call(request, `${api.portal}/${portalId}/dashboards/${dashboardId}`),
-      widgets: call(request, `${api.widget}?projectId=${projectId}`)
-    })
-    const views = result.dashboardDetail.payload.views
-    delete result.dashboardDetail.payload.views
-    yield put(dashboardDetailLoaded(dashboardId, result.dashboardDetail.payload, result.widgets.payload, views))
+    operationWidgetProps.widgetIntoPool(widgets)
+
+    const formedViews: IFormedViews = views.reduce((obj, view) => {
+      obj[view.id] = {
+        ...view,
+        model: JSON.parse(view.model || '{}'),
+        variable: JSON.parse(view.variable || '[]')
+      }
+      return obj
+    }, {})
+
+    yield put(dashboardDetailLoaded(dashboard, items, widgets, formedViews))
   } catch (err) {
     yield put(loadDashboardDetailFail())
     errorHandler(err)
   }
 }
 
-export function* addDashboardItems (action) {
+export function* addDashboardItems(action: DashboardActionType) {
+  if (action.type !== ActionTypes.ADD_DASHBOARD_ITEMS) {
+    return
+  }
+  const { dashboardItemsAdded, addDashboardItemsFail } = DashboardActions
   const { portalId, items, resolve } = action.payload
 
   try {
@@ -179,7 +132,9 @@ export function* addDashboardItems (action) {
       url: `${api.portal}/${portalId}/dashboards/${items[0].dashboardId}/widgets`,
       data: items
     })
-    yield put(dashboardItemsAdded(result.payload))
+    const widgets: IWidgetFormed[] = yield select(makeSelectWidgets())
+    const formedViews: IFormedViews = yield select(makeSelectFormedViews())
+    yield put(dashboardItemsAdded(result.payload, widgets, formedViews))
     resolve(result.payload)
   } catch (err) {
     yield put(addDashboardItemsFail())
@@ -187,7 +142,11 @@ export function* addDashboardItems (action) {
   }
 }
 
-export function* editDashboardItem (action) {
+export function* editDashboardItem(action: DashboardActionType) {
+  if (action.type !== ActionTypes.EDIT_DASHBOARD_ITEM) {
+    return
+  }
+  const { dashboardItemEdited, editDashboardItemFail } = DashboardActions
   const { portalId, item, resolve } = action.payload
   try {
     yield call(request, {
@@ -203,7 +162,11 @@ export function* editDashboardItem (action) {
   }
 }
 
-export function* editDashboardItems (action) {
+export function* editDashboardItems(action: DashboardActionType) {
+  if (action.type !== ActionTypes.EDIT_DASHBOARD_ITEMS) {
+    return
+  }
+  const { dashboardItemsEdited, editDashboardItemsFail } = DashboardActions
   const { portalId, items } = action.payload
   try {
     yield call(request, {
@@ -218,7 +181,11 @@ export function* editDashboardItems (action) {
   }
 }
 
-export function* deleteDashboardItem (action) {
+export function* deleteDashboardItem(action: DashboardActionType) {
+  if (action.type !== ActionTypes.DELETE_DASHBOARD_ITEM) {
+    return
+  }
+  const { dashboardItemDeleted, deleteDashboardItemFail } = DashboardActions
   const { id, resolve } = action.payload
   try {
     yield call(request, {
@@ -235,18 +202,327 @@ export function* deleteDashboardItem (action) {
   }
 }
 
-export function* getDashboardShareLink (action) {
-  const { id, authName } = action.payload
+function* getData(
+  renderType: RenderType,
+  itemId: number,
+  queryConditions: Partial<IQueryConditions>,
+  cancelTokenSource: CancelTokenSource,
+  resetPagination?: boolean
+) {
+  const {
+    dashboardItemDataLoaded,
+    loadDashboardItemDataFail
+  } = DashboardActions
+  const itemInfo: IDashboardItemInfo = yield select((state) =>
+    makeSelectItemInfo()(state, itemId)
+  )
+  const relatedWidget: IWidgetFormed = yield select((state) =>
+    makeSelectItemRelatedWidget()(state, itemId)
+  )
+  const requestParams = getRequestParams(
+    relatedWidget,
+    itemInfo.queryConditions,
+    renderType === 'flush',
+    queryConditions
+  )
+  if (resetPagination) {
+    const initialPagination = getInitialPagination(relatedWidget)
+    if (initialPagination) {
+      const { pageNo, pageSize } = initialPagination
+      requestParams.pagination = {
+        ...requestParams.pagination,
+        pageNo,
+        pageSize
+      }
+    }
+  }
   try {
-    const shareInfo = yield call(request, {
-      method: 'get',
-      url: `${api.portal}/dashboards/${id}/share`,
-      params: {username: authName}
+    const result = yield call(request, {
+      method: 'post',
+      url: `${api.view}/${relatedWidget.viewId}/getdata`,
+      data: getRequestBody(requestParams),
+      cancelToken: cancelTokenSource.token
     })
-    if (authName) {
-      yield put(dashboardSecretLinkLoaded(shareInfo.payload))
-    } else {
-      yield put(dashboardShareLinkLoaded(shareInfo.payload))
+    result.payload = result.payload || {}
+    const { payload } = result
+    payload.resultList = payload.resultList || []
+    requestParams.pagination = getUpdatedPagination(
+      requestParams.pagination,
+      result.payload
+    )
+    yield put(
+      dashboardItemDataLoaded(
+        renderType,
+        itemId,
+        requestParams,
+        result.payload,
+        {
+          ...requestParams,
+          widget: relatedWidget
+        }
+      )
+    )
+  } catch (err) {
+    yield put(loadDashboardItemDataFail(itemId, getErrorMessage(err)))
+  }
+}
+
+export function* getDashboardItemData(action: DashboardActionType) {
+  if (action.type !== ActionTypes.LOAD_DASHBOARD_ITEM_DATA) {
+    return
+  }
+  const {
+    renderType,
+    itemId,
+    queryConditions,
+    cancelTokenSource
+  } = action.payload
+  yield getData(renderType, itemId, queryConditions, cancelTokenSource)
+}
+
+export function* getBatchDataWithControlValues(action: DashboardActionType) {
+  if (action.type !== ActionTypes.LOAD_BATCH_DATA_WITH_CONTROL_VALUES) {
+    return
+  }
+  const { type, itemId, formValues, cancelTokenSource } = action.payload
+  const formedViews: IFormedViews = yield select(makeSelectFormedViews())
+
+  if (type === ControlPanelTypes.Global) {
+    const currentDashboard: IDashboard = yield select(
+      makeSelectCurrentDashboard()
+    )
+    const globalControlFormValues = yield select(
+      makeSelectGlobalControlPanelFormValues()
+    )
+    const globalControlConditionsByItem = getCurrentControlValues(
+      type,
+      currentDashboard.config.filters,
+      formedViews,
+      globalControlFormValues,
+      formValues
+    )
+    const globalControlConditionsByItemEntries: Array<[
+      string,
+      IGlobalControlConditions
+    ]> = Object.entries(
+      globalControlConditionsByItem as IGlobalControlConditionsByItem
+    )
+    while (globalControlConditionsByItemEntries.length) {
+      const [itemId, queryConditions] = globalControlConditionsByItemEntries[0]
+      yield fork(
+        getData,
+        'clear',
+        Number(itemId),
+        queryConditions,
+        cancelTokenSource,
+        true
+      )
+      globalControlConditionsByItemEntries.shift()
+    }
+  } else {
+    const relatedWidget: IWidgetFormed = yield select((state) =>
+      makeSelectItemRelatedWidget()(state, itemId)
+    )
+    const localControlFormValues = yield select((state) =>
+      makeSelectLocalControlPanelFormValues()(state, itemId)
+    )
+    const localControlConditions = getCurrentControlValues(
+      type,
+      relatedWidget.config.controls,
+      formedViews,
+      localControlFormValues,
+      formValues
+    )
+    yield getData(
+      'clear',
+      itemId,
+      localControlConditions as ILocalControlConditions,
+      cancelTokenSource,
+      true
+    )
+  }
+}
+
+function getDownloadInfo(
+  type: DownloadTypes,
+  itemId: number,
+  itemInfo: IDashboardItemInfo,
+  relatedWidget: IWidgetFormed,
+  formedViews: IFormedViews,
+  localControlFormValues: object,
+  globalControlConditions: IGlobalControlConditions
+): IDataDownloadStatistic {
+  const localControlConditions = getCurrentControlValues(
+    ControlPanelTypes.Local,
+    relatedWidget.config.controls,
+    formedViews,
+    localControlFormValues
+  )
+  const requestParams = getRequestParams(
+    relatedWidget,
+    itemInfo.queryConditions,
+    false,
+    {
+      ...globalControlConditions,
+      ...localControlConditions
+    }
+  )
+  const id = type === DownloadTypes.Dashboard ? itemId : relatedWidget.id
+  return {
+    id,
+    param: {
+      ...getRequestBody(requestParams),
+      flush: true,
+      pageNo: 0,
+      pageSize: 0
+    },
+    itemId,
+    widget: relatedWidget
+  }
+}
+
+export function* initiateDownloadTask(action: DashboardActionType) {
+  if (action.type !== ActionTypes.INITIATE_DOWNLOAD_TASK) {
+    return
+  }
+  const { DownloadTaskInitiated, initiateDownloadTaskFail } = DashboardActions
+  const { type, itemId } = action.payload
+  const currentDashboard: IDashboard = yield select(
+    makeSelectCurrentDashboard()
+  )
+  const formedViews: IFormedViews = yield select(makeSelectFormedViews())
+  const globalControlFormValues = yield select(
+    makeSelectGlobalControlPanelFormValues()
+  )
+  const globalControlConditionsByItem: IGlobalControlConditionsByItem = getCurrentControlValues(
+    ControlPanelTypes.Global,
+    currentDashboard.config.filters,
+    formedViews,
+    globalControlFormValues
+  )
+
+  let id = action.payload.id
+  const downloadInfo: IDataDownloadStatistic[] = []
+
+  if (type === DownloadTypes.Dashboard) {
+    const currentItems = yield select(makeSelectCurrentItems())
+    const itemIds = currentItems.map((item) => item.id)
+    while (itemIds.length) {
+      const itemId = itemIds[0]
+      const globalControlConditions = globalControlConditionsByItem[itemId]
+      const itemInfo: IDashboardItemInfo = yield select((state) =>
+        makeSelectItemInfo()(state, itemId)
+      )
+      const relatedWidget: IWidgetFormed = yield select((state) =>
+        makeSelectItemRelatedWidget()(state, itemId)
+      )
+      const localControlFormValues = yield select((state) =>
+        makeSelectLocalControlPanelFormValues()(state, itemId)
+      )
+      downloadInfo.push(
+        getDownloadInfo(
+          type,
+          itemId,
+          itemInfo,
+          relatedWidget,
+          formedViews,
+          localControlFormValues,
+          globalControlConditions
+        )
+      )
+      itemIds.shift()
+    }
+  } else {
+    const itemInfo: IDashboardItemInfo = yield select((state) =>
+      makeSelectItemInfo()(state, itemId)
+    )
+    const relatedWidget: IWidgetFormed = yield select((state) =>
+      makeSelectItemRelatedWidget()(state, itemId)
+    )
+    const localControlFormValues = yield select((state) =>
+      makeSelectLocalControlPanelFormValues()(state, itemId)
+    )
+    id = relatedWidget.id
+    downloadInfo.push(
+      getDownloadInfo(
+        type,
+        itemId,
+        itemInfo,
+        relatedWidget,
+        formedViews,
+        localControlFormValues,
+        globalControlConditionsByItem[itemId]
+      )
+    )
+  }
+
+  try {
+    yield call(request, {
+      method: 'POST',
+      url: `${api.download}/submit/${type}/${id}`,
+      data: downloadInfo.map((d) => omit(d, 'widget', 'itemId'))
+    })
+    message.success('下载任务创建成功！')
+    yield put(DownloadTaskInitiated(type, downloadInfo, itemId))
+  } catch (err) {
+    yield put(initiateDownloadTaskFail(err, type, itemId))
+    errorHandler(err)
+  }
+}
+
+export function* getDashboardShareLink(action: DashboardActionType) {
+  if (action.type !== ActionTypes.LOAD_DASHBOARD_SHARE_LINK) {
+    return
+  }
+  const {
+    dashboardAuthorizedShareLinkLoaded,
+    dashboardShareLinkLoaded,
+    dashboardPasswordShareLinkLoaded,
+    loadDashboardShareLinkFail
+  } = DashboardActions
+
+  const {
+    id,
+    mode,
+    permission,
+    expired,
+    roles,
+    viewers
+  } = action.payload.params
+
+  let requestData = null
+  switch (mode) {
+    case 'AUTH':
+      requestData = { mode, expired, permission, roles, viewers }
+      break
+    case 'PASSWORD':
+    case 'NORMAL':
+      requestData = { mode, expired }
+      break
+    default:
+      break
+  }
+
+  try {
+    const result = yield call(request, {
+      method: 'post',
+      url: `${api.portal}/dashboards/${id}/share`,
+      data: requestData
+    })
+
+    const { token, password } = result.payload
+    switch (mode) {
+      case 'AUTH':
+        yield put(dashboardAuthorizedShareLinkLoaded(token))
+        break
+      case 'PASSWORD':
+        yield put(dashboardPasswordShareLinkLoaded(token, password))
+        break
+      case 'NORMAL':
+        yield put(dashboardShareLinkLoaded(token))
+        break
+      default:
+        break
     }
   } catch (err) {
     yield put(loadDashboardShareLinkFail())
@@ -254,21 +530,58 @@ export function* getDashboardShareLink (action) {
   }
 }
 
-export function* getWidgetShareLink (action) {
-  const { id, authName, itemId, resolve } = action.payload
+export function* getWidgetShareLink(action: DashboardActionType) {
+  if (action.type !== ActionTypes.LOAD_WIDGET_SHARE_LINK) {
+    return
+  }
+  const {
+    widgetAuthorizedShareLinkLoaded,
+    widgetPasswordShareLinkLoaded,
+    widgetShareLinkLoaded,
+    loadWidgetShareLinkFail
+  } = DashboardActions
+  const {
+    id,
+    itemId,
+    mode,
+    expired,
+    permission,
+    roles,
+    viewers
+  } = action.payload.params
+
+  let requestData = null
+  switch (mode) {
+    case 'AUTH':
+      requestData = { mode, expired, permission, roles, viewers }
+      break
+    case 'PASSWORD':
+    case 'NORMAL':
+      requestData = { mode, expired }
+      break
+    default:
+      break
+  }
+
   try {
-    const shareInfo = yield call(request, {
-      method: 'get',
+    const result = yield call(request, {
+      method: 'post',
       url: `${api.widget}/${id}/share`,
-      params: {username: authName}
+      data: requestData
     })
-    if (authName) {
-      yield put(widgetSecretLinkLoaded(shareInfo.payload, itemId))
-    } else {
-      yield put(widgetShareLinkLoaded(shareInfo.payload, itemId))
-    }
-    if (resolve) {
-      resolve()
+    const { token, password } = result.payload
+    switch (mode) {
+      case 'AUTH':
+        yield put(widgetAuthorizedShareLinkLoaded(token, itemId))
+        break
+      case 'PASSWORD':
+        yield put(widgetPasswordShareLinkLoaded(token, password, itemId))
+        break
+      case 'NORMAL':
+        yield put(widgetShareLinkLoaded(token, itemId))
+        break
+      default:
+        break
     }
   } catch (err) {
     yield put(loadWidgetShareLinkFail(itemId))
@@ -276,9 +589,23 @@ export function* getWidgetShareLink (action) {
   }
 }
 
-export function* getWidgetCsv (action) {
+export function* getWidgetCsv(action: DashboardActionType) {
+  if (action.type !== ActionTypes.LOAD_WIDGET_CSV) {
+    return
+  }
+  const { widgetCsvLoaded, loadWidgetCsvFail } = DashboardActions
   const { itemId, widgetId, requestParams } = action.payload
-  const { filters, tempFilters, linkageFilters, globalFilters, variables, linkageVariables, globalVariables, ...rest } = requestParams
+  // @TODO combine widget static filters with local filters
+  const {
+    filters,
+    tempFilters,
+    linkageFilters,
+    globalFilters,
+    variables,
+    linkageVariables,
+    globalVariables,
+    ...rest
+  } = requestParams
 
   try {
     const path = yield call(request, {
@@ -286,7 +613,10 @@ export function* getWidgetCsv (action) {
       url: `${api.widget}/${widgetId}/excel`,
       data: {
         ...rest,
-        filters: filters.concat(tempFilters).concat(linkageFilters).concat(globalFilters),
+        filters: filters
+          .concat(tempFilters)
+          .concat(linkageFilters)
+          .concat(globalFilters),
         params: variables.concat(linkageVariables).concat(globalVariables)
       }
     })
@@ -299,20 +629,21 @@ export function* getWidgetCsv (action) {
   }
 }
 
-export default function* rootDashboardSaga (): IterableIterator<any> {
+export default function* rootDashboardSaga() {
   yield all([
-    takeEvery(LOAD_DASHBOARDS, getDashboards),
-    takeLatest(ADD_DASHBOARD, addDashboard),
-    takeEvery(EDIT_DASHBOARD, editDashboard),
-    takeEvery(EDIT_CURRENT_DASHBOARD, editCurrentDashboard),
-    takeEvery(DELETE_DASHBOARD, deleteDashboard),
-    takeLatest(LOAD_DASHBOARD_DETAIL, getDashboardDetail),
-    takeEvery(ADD_DASHBOARD_ITEMS, addDashboardItems),
-    takeEvery(EDIT_DASHBOARD_ITEM, editDashboardItem),
-    takeEvery(EDIT_DASHBOARD_ITEMS, editDashboardItems),
-    takeEvery(DELETE_DASHBOARD_ITEM, deleteDashboardItem),
-    takeLatest(LOAD_DASHBOARD_SHARE_LINK, getDashboardShareLink),
-    takeLatest(LOAD_WIDGET_SHARE_LINK, getWidgetShareLink),
-    takeLatest(LOAD_WIDGET_CSV, getWidgetCsv)
+    takeLatest(ActionTypes.LOAD_DASHBOARD_DETAIL, getDashboardDetail),
+    takeEvery(ActionTypes.ADD_DASHBOARD_ITEMS, addDashboardItems),
+    takeEvery(ActionTypes.EDIT_DASHBOARD_ITEM, editDashboardItem),
+    takeEvery(ActionTypes.EDIT_DASHBOARD_ITEMS, editDashboardItems),
+    takeEvery(ActionTypes.DELETE_DASHBOARD_ITEM, deleteDashboardItem),
+    takeEvery(ActionTypes.LOAD_DASHBOARD_ITEM_DATA, getDashboardItemData),
+    takeEvery(
+      ActionTypes.LOAD_BATCH_DATA_WITH_CONTROL_VALUES,
+      getBatchDataWithControlValues
+    ),
+    takeEvery(ActionTypes.INITIATE_DOWNLOAD_TASK, initiateDownloadTask),
+    takeLatest(ActionTypes.LOAD_DASHBOARD_SHARE_LINK, getDashboardShareLink),
+    takeLatest(ActionTypes.LOAD_WIDGET_SHARE_LINK, getWidgetShareLink),
+    takeLatest(ActionTypes.LOAD_WIDGET_CSV, getWidgetCsv)
   ])
 }

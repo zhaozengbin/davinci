@@ -22,7 +22,6 @@ import { IChartProps } from '../../components/Chart'
 import { EChartOption } from 'echarts'
 import {
   decodeMetricName,
-  getChartTooltipLabel,
   getTextWidth,
   getSizeRate
 } from '../../components/util'
@@ -130,9 +129,10 @@ export default function (chartProps: IChartProps) {
       if (visualType === 'geoProvince') {
         areaVal = record[col.name]
         const area = getProvinceArea(areaVal)
+        const provinceName = getProvinceName(areaVal)
         if (area) {
-          if (!dataTree[areaVal]) {
-            dataTree[areaVal] = {
+          if (!dataTree[provinceName]) {
+            dataTree[provinceName] = {
               lon: area.lon,
               lat: area.lat,
               value,

@@ -18,42 +18,42 @@
  * >>
  */
 
-import * as React from 'react'
+import React, { ChangeEvent, FormEvent } from 'react'
 import Helmet from 'react-helmet'
 import { connect } from 'react-redux'
 import { createStructuredSelector } from 'reselect'
+import { RouteComponentProps } from 'react-router-dom'
 
 import LoginForm from './LoginForm'
-import { Icon } from 'antd'
 
 import { compose } from 'redux'
-import injectReducer from 'utils/injectReducer'
-import injectSaga from 'utils/injectSaga'
-// import reducer from '../App/reducer'
-// import saga from '../App/sagas'
 
 import { login, logged } from '../App/actions'
-import { makeSelectLoginLoading } from '../App/selectors'
+import {
+  makeSelectLoginLoading,
+  makeSelectOauth2Enabled
+} from '../App/selectors'
 import checkLogin from 'utils/checkLogin'
 import { setToken } from 'utils/request'
 import { statistic } from 'utils/statistic/statistic.dv'
+import ExternalLogin from '../ExternalLogin'
 
 const styles = require('./Login.less')
 
-interface ILoginProps {
-  router: any
-  loginLoading: boolean
-  onLogin: (username: string, password: string, resolve: () => any) => any
-  onLogged: (user) => void
-}
+type MappedStates = ReturnType<typeof mapStateToProps>
+type MappedDispatches = ReturnType<typeof mapDispatchToProps>
+type ILoginProps = MappedStates & MappedDispatches
 
 interface ILoginStates {
   username: string
   password: string
 }
 
-export class Login extends React.PureComponent<ILoginProps, ILoginStates> {
-  constructor (props) {
+export class Login extends React.PureComponent<
+  ILoginProps & RouteComponentProps,
+  ILoginStates
+> {
+  constructor(props) {
     super(props)
     this.state = {
       username: '',
@@ -61,7 +61,7 @@ export class Login extends React.PureComponent<ILoginProps, ILoginStates> {
     }
   }
 
-  public componentWillMount () {
+  public componentWillMount() {
     this.checkNormalLogin()
   }
 
@@ -71,50 +71,59 @@ export class Login extends React.PureComponent<ILoginProps, ILoginStates> {
       const loginUser = localStorage.getItem('loginUser')
       setToken(token)
       this.props.onLogged(JSON.parse(loginUser))
-      this.props.router.replace('/')
+      this.props.history.replace('/')
     }
   }
 
-  private changeUsername = (e) => {
+  private findPassword = () => {
+    const { history } = this.props
+    history.push('/findPassword')
+  }
+
+  private changeUsername = (e: ChangeEvent<HTMLInputElement>) => {
     this.setState({
       username: e.target.value.trim()
     })
   }
 
-  private changePassword = (e) => {
+  private changePassword = (e: ChangeEvent<HTMLInputElement>) => {
     this.setState({
       password: e.target.value
     })
   }
 
   private toSignUp = () => {
-    const { router } = this.props
-    router.replace('/register')
+    const { history } = this.props
+    history.replace('/register')
   }
 
-  private doLogin = () => {
-    const { onLogin, router } = this.props
+  private doLogin = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    const { onLogin, history } = this.props
     const { username, password } = this.state
 
     if (username && password) {
       onLogin(username, password, () => {
-        router.replace('/')
+        history.replace('/')
         statistic.whenSendTerminal()
-        statistic.setOperations({
-            create_time:  statistic.getCurrentDateTime()
-          }, (data) => {
+        statistic.setOperations(
+          {
+            create_time: statistic.getCurrentDateTime()
+          },
+          (data) => {
             const loginRecord = {
               ...data,
               action: 'login'
             }
             statistic.sendOperation(loginRecord)
-        })
+          }
+        )
       })
     }
   }
 
-  public render () {
-    const { loginLoading } = this.props
+  public render() {
+    const { loginLoading, oauth2Enabled } = this.props
     const { username, password } = this.state
     return (
       <div className={styles.window}>
@@ -122,51 +131,49 @@ export class Login extends React.PureComponent<ILoginProps, ILoginStates> {
         <LoginForm
           username={username}
           password={password}
+          loading={loginLoading}
           onChangeUsername={this.changeUsername}
           onChangePassword={this.changePassword}
           onLogin={this.doLogin}
         />
-        <button
-          disabled={loginLoading}
-          onClick={this.doLogin}
-        >
-          {
-            loginLoading
-              ? <Icon type="loading" />
-              : ''
-          }
-          登 录
-        </button>
         <p className={styles.tips}>
-          <span>还没有账号？ </span>
-          <a href="javascript:;" onClick={this.toSignUp}>注册davinci账号</a>
+          <a
+            href="javascript:;"
+            className={styles.register}
+            onClick={this.toSignUp}
+          >
+            注册新账户
+          </a>
+          <a
+            href="javascript:;"
+            className={styles.forgetPassword}
+            onClick={this.findPassword}
+          >
+            忘记密码？
+          </a>
         </p>
+        {oauth2Enabled && <ExternalLogin />}
       </div>
     )
   }
 }
 
 const mapStateToProps = createStructuredSelector({
-  loginLoading: makeSelectLoginLoading()
+  loginLoading: makeSelectLoginLoading(),
+  oauth2Enabled: makeSelectOauth2Enabled()
 })
 
-export function mapDispatchToProps (dispatch) {
+export function mapDispatchToProps(dispatch) {
   return {
-    onLogin: (username, password, resolve) => dispatch(login(username, password, resolve)),
+    onLogin: (username: string, password: string, resolve: () => void) =>
+      dispatch(login(username, password, resolve)),
     onLogged: (user) => dispatch(logged(user))
   }
 }
 
-const withConnect = connect<{}, {}, ILoginProps>(mapStateToProps, mapDispatchToProps)
-// const withReducer = injectReducer({ key: 'global', reducer })
-// const withSaga = injectSaga({ key: 'global', saga })
+const withConnect = connect<{}, {}, ILoginProps>(
+  mapStateToProps,
+  mapDispatchToProps
+)
 
-export default compose(
-//  withReducer,
-//  withSaga,
- withConnect
-)(Login)
-
-
-
-
+export default compose(withConnect)(Login)

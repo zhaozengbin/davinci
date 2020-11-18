@@ -49,6 +49,8 @@ enum Types {
   EXECUTE_SQL = 'davinci/View/EXECUTE_SQL',
   EXECUTE_SQL_SUCCESS = 'davinci/View/EXECUTE_SQL_SUCCESS',
   EXECUTE_SQL_FAILURE = 'davinci/View/EXECUTE_SQL_FAILURE',
+  EXECUTE_SQL_CANCEL = 'davinci/View/EXECUTE_SQL_CANCEL',
+  IS_LAST_EXECUTE_WHOLE_SQL = 'davinci/View/IS_LAST_EXECUTE_WHOLE_SQL',
 
   UPDATE_EDITING_VIEW = 'davinci/View/UPDATE_EDITING_VIEW',
   UPDATE_EDITING_VIEW_INFO = 'davinci/View/UPDATE_EDITING_VIEW_INFO',
@@ -79,9 +81,7 @@ enum Types {
   LOAD_VIEW_DATA_SUCCESS = 'davinci/View/LOAD_VIEW_DATA_SUCCESS',
   LOAD_VIEW_DATA_FAILURE = 'davinci/View/LOAD_VIEW_DATA_FAILURE',
 
-  LOAD_VIEW_DISTINCT_VALUE = 'davinci/View/LOAD_VIEW_DISTINCT_VALUE',
-  LOAD_VIEW_DISTINCT_VALUE_SUCCESS = 'davinci/View/LOAD_VIEW_DISTINCT_VALUE_SUCCESS',
-  LOAD_VIEW_DISTINCT_VALUE_FAILURE = 'davinci/View/LOAD_VIEW_DISTINCT_VALUE_FAILURE',
+  LOAD_COLUMN_DISTINCT_VALUE = 'davinci/View/LOAD_COLUMN_DISTINCT_VALUE',
 
   LOAD_VIEW_DATA_FROM_VIZ_ITEM = 'davinci/View/LOAD_VIEW_DATA_FROM_VIZ_ITEM',
   LOAD_VIEW_DATA_FROM_VIZ_ITEM_SUCCESS = 'davinci/View/LOAD_VIEW_DATA_FROM_VIZ_ITEM_SUCCESS',
@@ -122,8 +122,11 @@ export enum ViewModelTypes {
   Value = 'value'
 }
 
-export const ModelTypeSqlTypeSetting = {
+export const DefaultModelTypeSqlTypeSetting = {
   [ViewModelTypes.Value]: SQL_NUMBER_TYPES,
+
+  // except SQL_STRING_TYPES field
+  // SQL_NUMBER_TYPES and SQL_DATE_TYPES field can also take it as ViewModelTypes.Category
   [ViewModelTypes.Category]: SQL_TYPES
 }
 
@@ -143,7 +146,9 @@ export enum ViewModelVisualTypes {
 
 export const VisualTypeSqlTypeSetting = {
   [ViewModelVisualTypes.Number]: SQL_NUMBER_TYPES,
-  [ViewModelVisualTypes.String]: SQL_STRING_TYPES,
+
+  // SQL_NUMBER_TYPES field can also take it as ViewModelVisualTypes.String
+  [ViewModelVisualTypes.String]: SQL_STRING_TYPES.concat(SQL_NUMBER_TYPES),
   [ViewModelVisualTypes.Date]: SQL_DATE_TYPES
 }
 

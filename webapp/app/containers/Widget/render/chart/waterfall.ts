@@ -21,7 +21,6 @@
 import { IChartProps } from '../../components/Chart'
 import {
   decodeMetricName,
-  getChartTooltipLabel,
   getAggregatorLocale
 } from '../../components/util'
 import {
@@ -29,9 +28,7 @@ import {
   getMetricAxisOption,
   getLabelOption,
   getLegendOption,
-  getGridPositions,
-  makeGrouped,
-  distinctXaxis
+  getGridPositions
 } from './util'
 import { EChartOption } from 'echarts'
 import { getFormattedValue } from '../../components/Config/Format'
@@ -197,7 +194,7 @@ export default function (chartProps: IChartProps) {
       if (xAxis === '累计') {
         return ''
       } else {
-        text.unshift(xAxis)
+        text.unshift(xAxis as string)
         if (color) {
           text[0] = `<span class="widget-tooltip-circle" style="background: ${color}"></span>` + text[0]
         }

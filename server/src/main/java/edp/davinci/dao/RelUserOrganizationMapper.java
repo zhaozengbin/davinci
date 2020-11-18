@@ -20,6 +20,7 @@
 package edp.davinci.dao;
 
 import edp.davinci.dto.organizationDto.OrganizationMember;
+import edp.davinci.dto.userDto.UserBaseInfo;
 import edp.davinci.model.RelUserOrganization;
 import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Param;
@@ -53,6 +54,7 @@ public interface RelUserOrganizationMapper {
     })
     List<OrganizationMember> getOrgMembers(@Param("orgId") Long orgId);
 
+    Set<UserBaseInfo> selectOrgMembers(@Param("orgId") Long orgId, @Param("ids") Set<Long> ids);
 
     @Select({"select * from rel_user_organization where id = #{id}"})
     RelUserOrganization getById(@Param("id") Long id);
@@ -70,7 +72,5 @@ public interface RelUserOrganizationMapper {
 
     int insertBatch(@Param("set") Set<RelUserOrganization> set);
 
-
     int deleteBatch(@Param("set") Set<Long> set);
-
 }

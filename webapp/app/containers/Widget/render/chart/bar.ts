@@ -27,8 +27,7 @@ import {
 } from 'containers/Widget/components/Config/Format'
 import {
   decodeMetricName,
-  getChartTooltipLabel,
-  getAggregatorLocale
+  getChartTooltipLabel
 } from '../../components/util'
 import {
   getDimetionAxisOption,
@@ -37,17 +36,22 @@ import {
   getLegendOption,
   getGridPositions,
   makeGrouped,
-  distinctXaxis
+  getGroupedXaxis,
+  getCartesianChartMetrics,
+  getCartesianChartReferenceOptions
 } from './util'
 import { getStackName, EmptyStack } from 'containers/Widget/components/Config/Stack'
 const defaultTheme = require('assets/json/echartsThemes/default.project.json')
 const defaultThemeColors = defaultTheme.theme.color
 
-import { barChartStylesMigrationRecorder } from 'utils/migrationRecorders'
+import { inGroupColorSort } from '../../components/Config/Sort/util'
+import { FieldSortTypes } from '../../components/Config/Sort'
+import ChartTypes from '../../config/chart/ChartTypes'
 
 export default function (chartProps: IChartProps, drillOptions) {
-  const { data, cols, metrics, chartStyles: prevChartStyles, color, tip } = chartProps
-  const chartStyles = barChartStylesMigrationRecorder(prevChartStyles)
+  const { data, cols, chartStyles, color, tip, references } = chartProps
+  const { isDrilling, getDataDrillDetail, instance, selectedItems, callback } = drillOptions
+  const metrics =  getCartesianChartMetrics(chartProps.metrics)
 
   const { bar, label, legend, xAxis, yAxis, splitLine } = chartStyles
   const {
@@ -77,7 +81,6 @@ export default function (chartProps: IChartProps, drillOptions) {
     horizontalLineStyle
   } = splitLine
 
-  const { selectedItems } = drillOptions
   const labelOption = {
     label: {
       ...getLabelOption('bar', label, metrics, false, {
@@ -101,14 +104,16 @@ export default function (chartProps: IChartProps, drillOptions) {
       })
     }
   }
+  const referenceOptions = getCartesianChartReferenceOptions(references, ChartTypes.Bar, metrics, data, barChart)
 
   const xAxisColumnName = cols.length ? cols[0].name : ''
 
-  let xAxisData = data.map((d) => d[xAxisColumnName] || '')
+  let xAxisData = []
   let grouped = {}
   let percentGrouped = {}
+
   if (color.items.length) {
-    xAxisData = distinctXaxis(data, xAxisColumnName)
+    xAxisData = getGroupedXaxis(data, xAxisColumnName, metrics)
     grouped = makeGrouped(
       data,
       color.items.map((c) => c.name),
@@ -129,48 +134,40 @@ export default function (chartProps: IChartProps, drillOptions) {
       metrics,
       configKeys
     )
+  } else {
+    xAxisData = data.map((d) => d[xAxisColumnName] || '')
   }
 
   const series = []
   const seriesData = []
   metrics.forEach((m, i) => {
     const decodedMetricName = decodeMetricName(m.name)
-    const localeMetricName = `[${getAggregatorLocale(
-      m.agg
-    )}] ${decodedMetricName}`
     const stackOption = turnOnStack
       ? { stack: getStackName(m.name, stackConfig) }
       : null
+
     if (color.items.length) {
       const sumArr = []
       Object.entries(percentGrouped).forEach(([k, v]: [string, any[]]) => {
         sumArr.push(getColorDataSum(v, metrics))
       })
 
-      Object.entries(grouped).forEach(([k, v]: [string, any[]]) => {
+      const groupEntries = Object.entries(grouped)
+      const customColorSort = color.items
+        .filter(({ sort }) => sort && sort.sortType === FieldSortTypes.Custom)
+        .map(({ name, sort }) => ({ name, list: sort[FieldSortTypes.Custom].sortList }))
+      if (customColorSort.length) {
+        inGroupColorSort(groupEntries, customColorSort[0])
+      }
+
+      groupEntries.forEach(([k, v]: [string, any[]], gIndex) => {
         const serieObj = {
           id: `${m.name}${DEFAULT_SPLITER}${DEFAULT_SPLITER}${k}`,
-          name: `${k} ${localeMetricName}`,
+          name: `${k}${metrics.length > 1 ? ` ${m.displayName}` : ''}`,
           type: 'bar',
           ...stackOption,
           sampling: 'average',
           data: v.map((g, index) => {
-            // if (index === interactIndex) {
-            //   return {
-            //     value: g[m],
-            //     itemStyle: {
-            //       normal: {
-            //         opacity: 1
-            //       }
-            //     }
-            //   }
-            // } else {
-            // if (percentage) {
-            //   return g[`${m.agg}(${decodedMetricName})`] / sumArr[index] * 100
-            // } else {
-            //   return g[`${m.agg}(${decodedMetricName})`]
-            // }
-            // }
             if (
               selectedItems &&
               selectedItems.length &&
@@ -202,7 +199,10 @@ export default function (chartProps: IChartProps, drillOptions) {
               color: color.items[0].config.values[k]
             }
           },
-          ...labelOption
+          ...labelOption,
+          ...(gIndex === groupEntries.length - 1 &&
+              i === metrics.length - 1 &&
+              referenceOptions)
         }
         series.push(serieObj)
         seriesData.push(grouped[k])
@@ -210,32 +210,11 @@ export default function (chartProps: IChartProps, drillOptions) {
     } else {
       const serieObj = {
         id: m.name,
-        name: decodedMetricName,
+        name: m.displayName,
         type: 'bar',
         ...stackOption,
         sampling: 'average',
         data: data.map((d, index) => {
-          // if (index === interactIndex) {
-          //   return {
-          //     value: d[m],
-          //     lineStyle: {
-          //       normal: {
-          //         opacity: 1
-          //       }
-          //     },
-          //     itemStyle: {
-          //       normal: {
-          //         opacity: 1
-          //       }
-          //     }
-          //   }
-          // } else {
-          // if (percentage) {
-          //   return d[`${m.agg}(${decodedMetricName})`] / getDataSum(data, metrics)[index] * 100
-          // } else {
-          //   return d[`${m.agg}(${decodedMetricName})`]
-          // }
-          // }
           if (
             selectedItems &&
             selectedItems.length &&
@@ -288,7 +267,8 @@ export default function (chartProps: IChartProps, drillOptions) {
         // color: color.value[m.name] || defaultThemeColors[i]
         // }
         // },
-        ...labelOption
+        ...labelOption,
+        ...(i === metrics.length - 1 && referenceOptions)
       }
       series.push(serieObj)
       seriesData.push([...data])
@@ -308,6 +288,7 @@ export default function (chartProps: IChartProps, drillOptions) {
       if (acc[stackName]) {
         return acc
       }
+
       acc[stackName] = {
         name: stackName,
         type: 'bar',
@@ -324,7 +305,15 @@ export default function (chartProps: IChartProps, drillOptions) {
             formatter: (params) => {
               let val = series
                 .filter((s) => s.stack === stackName)
-                .reduce((acc, s) => acc + s.data[params.dataIndex], 0)
+                .reduce((acc, s) => {
+                  const dataIndex = params.dataIndex
+                  if (typeof s.data[dataIndex] === 'number') {
+                    return acc + s.data[params.dataIndex]
+                  } else {
+                    const { value } = s.data[dataIndex]
+                    return acc + value
+                  }
+                }, 0)
               let format = metrics[serieIdx].format
               if (percentage) {
                 format = {
@@ -346,7 +335,6 @@ export default function (chartProps: IChartProps, drillOptions) {
     }, {})
     series.push(...Object.values(sumSeries))
   }
-  const { isDrilling, getDataDrillDetail, instance } = drillOptions
   const brushedOptions =
     isDrilling === true
       ? {
@@ -362,6 +350,7 @@ export default function (chartProps: IChartProps, drillOptions) {
           }
         }
       : null
+
   // if (isDrilling) {
   //   //  instance.off('brushselected')
   //     instance.on('brushselected', brushselected)
@@ -376,6 +365,9 @@ export default function (chartProps: IChartProps, drillOptions) {
   //       })
   //     }, 0)
   //   }
+  if (callback) {
+    callback.call(null, seriesData)
+  }
   function brushselected (params) {
     const brushComponent = params.batch[0]
     const brushed = []
@@ -401,26 +393,6 @@ export default function (chartProps: IChartProps, drillOptions) {
       getDataDrillDetail(JSON.stringify({ range, brushed, sourceData }))
     }
   }
-
-  // dataZoomOptions = dataZoomThreshold > 0 && dataZoomThreshold < dataSource.length && {
-  //   dataZoom: [{
-  //     type: 'inside',
-  //     start: Math.round((1 - dataZoomThreshold / dataSource.length) * 100),
-  //     end: 100
-  //   }, {
-  //     start: Math.round((1 - dataZoomThreshold / dataSource.length) * 100),
-  //     end: 100,
-  //     handleIcon: 'M10.7,11.9v-1.3H9.3v1.3c-4.9,0.3-8.8,4.4-8.8,9.4c0,5,3.9,9.1,8.8,9.4v1.3h1.3v-1.3c4.9-0.3,8.8-4.4,8.8-9.4C19.5,16.3,15.6,12.2,10.7,11.9z M13.3,24.4H6.7V23h6.6V24.4z M13.3,19.6H6.7v-1.4h6.6V19.6z',
-  //     handleSize: '80%',
-  //     handleStyle: {
-  //       color: '#fff',
-  //       shadowBlur: 3,
-  //       shadowColor: 'rgba(0, 0, 0, 0.6)',
-  //       shadowOffsetX: 2,
-  //       shadowOffsetY: 2
-  //     }
-  //   }]
-  // }
 
   const xAxisSplitLineConfig = {
     showLine: showVerticalLine,

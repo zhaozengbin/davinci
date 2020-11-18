@@ -19,12 +19,18 @@
 
 package edp.core.utils;
 
-import sun.misc.BASE64Encoder;
-
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.Base64;
 
 public class MD5Util {
+
+
+    public static final int BIT16 = 16;
+    public static final int BIT32 = 32;
+    public static final int BIT64 = 64;
+    public static final int BIT128 = 128;
+    public static final int BIT256 = 256;
 
     /**
      * MD5加密
@@ -40,26 +46,14 @@ public class MD5Util {
             // 创建加密对象
             MessageDigest md = MessageDigest.getInstance("md5");
             if (bit == 64) {
-                BASE64Encoder bw = new BASE64Encoder();
-                String bsB64 = bw.encode(md.digest(src.getBytes(StandardCharsets.UTF_8)));
-                md5 = bsB64;
+                Base64.Encoder encoder = Base64.getEncoder();
+                md5 = encoder.encodeToString(md.digest(src.getBytes(StandardCharsets.UTF_8)));
             } else {
                 // 计算MD5函数
                 md.update(src.getBytes(StandardCharsets.UTF_8));
                 byte b[] = md.digest();
-                int i;
-                StringBuffer sb = new StringBuffer("");
-                for (int offset = 0; offset < b.length; offset++) {
-                    i = b[offset];
-                    if (i < 0)
-                        i += 256;
-                    if (i < 16)
-                        sb.append("0");
-                    sb.append(Integer.toHexString(i));
-                }
-                md5 = sb.toString();
+                md5 = byteToString(b);
                 if (bit == 16) {
-                    //截取32位md5为16位
                     String md16 = md5.substring(8, 24);
                     md5 = md16;
                     if (isUpper) {
@@ -75,5 +69,19 @@ public class MD5Util {
             md5 = md5.toUpperCase();
         }
         return md5;
+    }
+
+    public static String byteToString(byte[] bytes) {
+        int i;
+        StringBuffer buffer = new StringBuffer("");
+        for (int offset = 0; offset < bytes.length; offset++) {
+            i = bytes[offset];
+            if (i < 0)
+                i += 256;
+            if (i < 16)
+                buffer.append("0");
+            buffer.append(Integer.toHexString(i));
+        }
+        return buffer.toString();
     }
 }

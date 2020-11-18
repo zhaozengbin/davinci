@@ -32,7 +32,6 @@ import edp.davinci.core.enums.NumericUnitEnum;
 import edp.davinci.core.enums.SqlColumnEnum;
 import edp.davinci.core.model.*;
 import edp.davinci.dto.viewDto.Param;
-import jdk.nashorn.api.scripting.ScriptObjectMirror;
 import org.apache.poi.hssf.usermodel.HSSFWorkbook;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.ss.util.CellRangeAddress;
@@ -40,9 +39,7 @@ import org.apache.poi.xssf.streaming.SXSSFWorkbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.web.multipart.MultipartFile;
 
-import javax.script.Invocable;
 import javax.script.ScriptEngine;
-import javax.script.ScriptException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.*;
@@ -50,8 +47,8 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static edp.core.consts.Consts.*;
-import static edp.davinci.common.utils.ScriptUtiils.formatHeader;
-import static edp.davinci.common.utils.ScriptUtiils.getCellValueScriptEngine;
+import static edp.davinci.common.utils.ScriptUtils.formatHeader;
+
 
 public class ExcelUtils {
 
@@ -195,8 +192,7 @@ public class ExcelUtils {
         List<ExcelHeader> excelHeaders = null;
         if (isTable) {
             try {
-                engine = getCellValueScriptEngine();
-                excelHeaders = formatHeader(engine, json, params);
+                excelHeaders = formatHeader(json, params);
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -235,8 +231,7 @@ public class ExcelUtils {
                     if (queryColumn.getName().equals(excelHeader.getKey())) {
                         queryColumn.setType(excelHeader.getType());
                         columnList.add(queryColumn);
-                        columnWidthMap.put(queryColumn.getName(), queryColumn.getName().getBytes().length >= queryColumn.getType().getBytes().length ?
-                                queryColumn.getName().getBytes().length : queryColumn.getType().getBytes().length);
+                        columnWidthMap.put(queryColumn.getName(), Math.max(queryColumn.getName().getBytes().length, queryColumn.getType().getBytes().length));
 
                         //获取对应数据格式
                         if (null != excelHeader.getFormat()) {
@@ -297,8 +292,7 @@ public class ExcelUtils {
             for (int i = 0; i < columns.size(); i++) {
                 QueryColumn queryColumn = columns.get(i);
 
-                columnWidthMap.put(queryColumn.getName(), queryColumn.getName().getBytes().length >= queryColumn.getType().getBytes().length ?
-                        queryColumn.getName().getBytes().length : queryColumn.getType().getBytes().length);
+                columnWidthMap.put(queryColumn.getName(), Math.max(queryColumn.getName().getBytes().length, queryColumn.getType().getBytes().length));
 
                 Cell cell = row.createCell(i);
                 cell.setCellStyle(headerCellStyle);
@@ -399,17 +393,17 @@ public class ExcelUtils {
      * @return
      */
     public static String getDataFormat(Object fieldTypeObject) {
-        
+
         if (null == fieldTypeObject) {
             return null;
         }
 
         String formatExpr = "@";
-        
-        if (fieldTypeObject instanceof FieldCurrency || fieldTypeObject instanceof FieldNumeric) {
-            
+
+        if (fieldTypeObject instanceof FieldNumeric) {
+
             FieldNumeric fieldNumeric = (FieldNumeric) fieldTypeObject;
-            
+
             StringBuilder fmtSB = new StringBuilder();
 
             if (fieldTypeObject instanceof FieldCurrency) {
@@ -419,13 +413,18 @@ public class ExcelUtils {
 
             fmtSB.append(OCTOTHORPE);
 
-            if (fieldNumeric.isUseThousandSeparator()) {
+            if (fieldNumeric.isUseThousandSeparator() &&
+                    fieldNumeric.getUnit() != NumericUnitEnum.TenThousand &&
+                    fieldNumeric.getUnit() != NumericUnitEnum.OneHundredMillion) {
                 fmtSB.append(COMMA).append(makeNTimesString(2, OCTOTHORPE)).append("0");
             }
 
-            String nzero = makeNTimesString(fieldNumeric.getDecimalPlaces(), 0);
-            if (!StringUtils.isEmpty(nzero)) {
-                fmtSB.append(".").append(nzero);
+            if (fieldNumeric.getUnit() != NumericUnitEnum.TenThousand &&
+                    fieldNumeric.getUnit() != NumericUnitEnum.OneHundredMillion) {
+                String nzero = makeNTimesString(fieldNumeric.getDecimalPlaces(), 0);
+                if (!StringUtils.isEmpty(nzero)) {
+                    fmtSB.append(".").append(nzero);
+                }
             }
 
             if (null != fieldNumeric.getUnit() && !StringUtils.isEmpty(getUnitExpr(fieldNumeric))) {
@@ -439,44 +438,35 @@ public class ExcelUtils {
 
             formatExpr = fmtSB.toString();
 
-        }
-        else if (fieldTypeObject instanceof FieldCustom) {
+        } else if (fieldTypeObject instanceof FieldCustom) {
 
-        }
-        else if (fieldTypeObject instanceof FieldDate) {
+        } else if (fieldTypeObject instanceof FieldPercentage) {
 
-            // TODO need to fix impossible cast
-            FieldCustom fieldCustom = (FieldCustom) fieldTypeObject;
-            
-            formatExpr = fieldCustom.getFormat().toLowerCase();
-        }
-        else if (fieldTypeObject instanceof FieldPercentage) {
-            
             FieldPercentage fieldPercentage = (FieldPercentage) fieldTypeObject;
 
             StringBuilder fmtSB = new StringBuilder("0");
             if (fieldPercentage.getDecimalPlaces() > 0) {
                 fmtSB.append(".").append(makeNTimesString(fieldPercentage.getDecimalPlaces(), 0));
-
             }
-            
+
             fmtSB.append(PERCENT_SIGN);
 
             formatExpr = fmtSB.toString();
-        }
-        else if (fieldTypeObject instanceof FieldScientificNotation) {
-            
+
+        } else if (fieldTypeObject instanceof FieldScientificNotation) {
+
             FieldScientificNotation fieldScientificNotation = (FieldScientificNotation) fieldTypeObject;
-            
+
             StringBuilder fmtSB = new StringBuilder("0");
-            
+
             if (fieldScientificNotation.getDecimalPlaces() > 0) {
                 fmtSB.append(".").append(makeNTimesString(fieldScientificNotation.getDecimalPlaces(), 0));
             }
-            
+
             fmtSB.append("E+00");
-            
+
             formatExpr = fmtSB.toString();
+
         }
 
         return formatExpr;
@@ -492,20 +482,33 @@ public class ExcelUtils {
     private static String getUnitExpr(FieldNumeric fieldNumeric) {
         String unitExpr = null;
         switch (fieldNumeric.getUnit()) {
-            case None:
-                break;
             case Thousand:
+                unitExpr = COMMA + DOUBLE_QUOTES + fieldNumeric.getUnit().getUnit() + DOUBLE_QUOTES;
+                break;
             case TenThousand:
-                unitExpr = COMMA + "\"" + fieldNumeric.getUnit().getUnit() + "\"";
+                if (fieldNumeric.getDecimalPlaces() >= 4) {
+                    // 0!.0000"万"
+                    unitExpr = "0" + BACK_SLASH + DOT + makeNTimesString(4, "0") + DOUBLE_QUOTES + fieldNumeric.getUnit().getUnit() + DOUBLE_QUOTES;
+                } else {
+                    // 0!.0,"万"
+                    unitExpr = "0" + BACK_SLASH + DOT + "0" + COMMA + DOUBLE_QUOTES + fieldNumeric.getUnit().getUnit() + DOUBLE_QUOTES;
+                }
                 break;
             case Million:
+                unitExpr = makeNTimesString(2, COMMA) + DOUBLE_QUOTES + fieldNumeric.getUnit().getUnit() + DOUBLE_QUOTES;
+                break;
             case OneHundredMillion:
-                unitExpr = makeNTimesString(2, COMMA) + "\"" + fieldNumeric.getUnit().getUnit() + "\"";
+                if (fieldNumeric.getDecimalPlaces() >= 8) {
+                    // !.00000000"亿"
+                    unitExpr = "0" + BACK_SLASH + DOT + makeNTimesString(8, "0") + DOUBLE_QUOTES + fieldNumeric.getUnit().getUnit() + DOUBLE_QUOTES;
+                } else {
+                    // !.00,,"亿"
+                    unitExpr = "0" + BACK_SLASH + DOT + "00" + COMMA + COMMA + DOUBLE_QUOTES + fieldNumeric.getUnit().getUnit() + DOUBLE_QUOTES;
+                }
                 break;
             case Giga:
                 unitExpr = makeNTimesString(3, COMMA) + "\"" + fieldNumeric.getUnit().getUnit() + "\"";
                 break;
-
             default:
                 break;
         }
@@ -517,47 +520,6 @@ public class ExcelUtils {
     private static String makeNTimesString(int n, Object s) {
         return IntStream.range(0, n).mapToObj(i -> String.valueOf(s)).collect(Collectors.joining(EMPTY));
     }
-
-
-    /**
-     * format cell value
-     *
-     * @param engine
-     * @param list
-     * @param json
-     * @return
-     */
-    private static List<Map<String, Object>> formatValue(ScriptEngine engine, List<Map<String, Object>> list, String json) {
-        try {
-            Invocable invocable = (Invocable) engine;
-            Object obj = invocable.invokeFunction("getFormattedDataRows", json, list);
-
-            if (obj instanceof ScriptObjectMirror) {
-                ScriptObjectMirror som = (ScriptObjectMirror) obj;
-                if (som.isArray()) {
-                    final List<Map<String, Object>> convertList = new ArrayList<>();
-                    Collection<Object> values = som.values();
-                    values.forEach(v -> {
-                        Map<String, Object> map = new HashMap<>();
-                        ScriptObjectMirror vsom = (ScriptObjectMirror) v;
-                        for (String key : vsom.keySet()) {
-                            map.put(key, vsom.get(key));
-                        }
-                        convertList.add(map);
-                    });
-                    return convertList;
-                }
-            }
-
-        } catch (ScriptException e) {
-            e.printStackTrace();
-        } catch (NoSuchMethodException e) {
-            e.printStackTrace();
-        }
-
-        return list;
-    }
-
 
     public static boolean isTable(String json) {
         if (!StringUtils.isEmpty(json)) {

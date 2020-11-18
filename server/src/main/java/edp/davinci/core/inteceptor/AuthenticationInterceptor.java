@@ -26,6 +26,7 @@ import edp.core.annotation.AuthShare;
 import edp.core.enums.HttpCodeEnum;
 import edp.core.utils.TokenUtils;
 import edp.davinci.core.common.Constants;
+import edp.davinci.core.common.ErrorMsg;
 import edp.davinci.core.common.ResultMap;
 import edp.davinci.model.User;
 import edp.davinci.service.UserService;
@@ -69,8 +70,8 @@ public class AuthenticationInterceptor implements HandlerInterceptor {
 
         String token = request.getHeader(Constants.TOKEN_HEADER_STRING);
 
-        AuthShare authShareMethoed = method.getAnnotation(AuthShare.class);
-        if (null != authShareMethoed) {
+        AuthShare authShareMethod = method.getAnnotation(AuthShare.class);
+        if (null != authShareMethod) {
             if (!StringUtils.isEmpty(token) && token.startsWith(Constants.TOKEN_PREFIX)) {
                 String username = tokenUtils.getUsername(token);
                 User user = userService.getByUsername(username);
@@ -81,23 +82,27 @@ public class AuthenticationInterceptor implements HandlerInterceptor {
 
         if (StringUtils.isEmpty(token) || !token.startsWith(Constants.TOKEN_PREFIX)) {
             if (!request.getServletPath().endsWith("/download/page")) {
-                log.info("{} : Unknown token", request.getServletPath());
+                log.debug("{} : Unknown token", request.getServletPath());
             }
             response.setStatus(HttpCodeEnum.FORBIDDEN.getCode());
-            response.getWriter().print("The resource requires authentication, which was not supplied with the request");
+            response.getWriter().print(ErrorMsg.ERR_MSG_AUTHENTICATION);
             return false;
         }
         String username = tokenUtils.getUsername(token);
         User user = userService.getByUsername(username);
         if (null == user) {
-            log.info("{} : token user not found", request.getServletPath());
+            if (!request.getServletPath().endsWith("/download/page")) {
+                log.debug("{} : token user not found", request.getServletPath());
+            }
             response.setStatus(HttpCodeEnum.FORBIDDEN.getCode());
-            response.getWriter().print("ERROR Permission denied");
+            response.getWriter().print(ErrorMsg.ERR_MSG_PERMISSION);
             return false;
 
         }
         if (!tokenUtils.validateToken(token, user)) {
-            log.info("{} : token validation fails", request.getServletPath());
+            if (!request.getServletPath().endsWith("/download/page")) {
+                log.debug("{} : token validation fails", request.getServletPath());
+            }
             response.setStatus(HttpCodeEnum.FORBIDDEN.getCode());
             response.getWriter().print("Invalid token ");
             return false;

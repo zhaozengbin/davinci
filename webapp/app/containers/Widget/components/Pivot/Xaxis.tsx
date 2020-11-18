@@ -1,4 +1,4 @@
-import * as React from 'react'
+import React from 'react'
 import * as echarts from 'echarts/lib/echarts'
 import { IMetricAxisConfig } from './Pivot'
 import { IWidgetMetric, DimetionType, IChartStyles } from '../Widget'
@@ -123,7 +123,7 @@ export class Xaxis extends React.PureComponent<IXaxisProps, {}> {
 
             grid.push({
               top: dimetionAxis === 'col' ? xSum : ySum,
-              left: dimetionAxis === 'col' ? ySum - 1 : (xSum - 1 + l * width),   // 隐藏yaxisline
+              left: dimetionAxis === 'col' ? ySum - 1 : (xSum - 1 + l * width),   // 隐藏yaxisline
               width
             })
 

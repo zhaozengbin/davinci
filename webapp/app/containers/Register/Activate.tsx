@@ -1,4 +1,4 @@
-import * as React from 'react'
+import React from 'react'
 import { compose } from 'redux'
 import injectReducer from 'utils/injectReducer'
 import injectSaga from 'utils/injectSaga'
@@ -9,14 +9,12 @@ import { connect } from 'react-redux'
 import { active } from '../App/actions'
 import { createStructuredSelector } from 'reselect'
 import { makeSelectSignupLoading } from './selectors'
-import { InjectedRouter } from 'react-router/lib/Router'
 import { Spin } from 'antd'
 const styles = require('./register.less')
 
 
 interface IActivateProps {
   onActiveUser: (token: string, resolve: (err?: string) => any) => any
-  router: InjectedRouter
 }
 
 export class Activate extends React.PureComponent <IActivateProps, {}> {

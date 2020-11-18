@@ -1,8 +1,8 @@
-import { QueryVariable } from 'containers/Dashboard/Grid'
+import { QueryVariable } from 'containers/Dashboard/types'
 import { DEFAULT_SPLITER, SQL_NUMBER_TYPES } from 'app/globalConstants'
 import OperatorType from 'utils/operatorTypes'
-import { IFilters } from 'app/components/Filters/types'
-import {getValidColumnValue} from 'app/components/Filters/util'
+import { IFilter } from 'app/components/Control/types'
+import {getValidColumnValue} from 'app/components/Control/util'
 export type LinkageType = 'column' | 'variable'
 
 export interface ILinkage {
@@ -58,13 +58,11 @@ export function getMappingLinkage (itemId: number, linkages: ILinkage[]) {
 }
 
 export function processLinkage (itemId: number, triggerData, mappingLinkage: IMappingLinkage, interactingLinkage) {
-  console.log(arguments)
   Object.keys(mappingLinkage).forEach((linkagerItemId) => {
     const linkage = mappingLinkage[+linkagerItemId]
 
-    const linkageFilters: IFilters[] = []
+    const linkageFilters: IFilter[] = []
     const linkageVariables: QueryVariable = []
-    console.log(linkage)
     linkage.forEach((l) => {
       const { triggerKey, triggerSqlType, triggerType, linkagerKey, linkagerSqlType, linkagerType, relation } = l
       const actuallyData = Array.isArray(triggerData) ? triggerData[0][triggerKey] : triggerData[triggerKey]
@@ -77,17 +75,15 @@ export function processLinkage (itemId: number, triggerData, mappingLinkage: IMa
           ? linkagerKey.replace(/\w+\((\w+)\)/, '$1')
           : linkagerKey
 
-        const filterJson: IFilters = {
+        const filterJson: IFilter = {
           name : validLinkagerKey,
           type: 'filter',
           value: interactValue,
           sqlType: linkagerSqlType,
           operator: relation
         }
-        console.log(filterJson)
         linkageFilters.push(filterJson)
        // linkageFilters.push(`${validLinkagerKey} ${relation} ${interactValue}`)   // 联动filter生成在此处
-        console.log(linkageFilters)
       } else if (linkagerType === 'variable') {
         linkageVariables.push({ name: linkagerKey, value: interactValue })
       }
@@ -106,7 +102,6 @@ export function processLinkage (itemId: number, triggerData, mappingLinkage: IMa
       }
     }
   })
-  console.log(interactingLinkage)
   return interactingLinkage
 }
 

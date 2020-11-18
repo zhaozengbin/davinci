@@ -1,4 +1,4 @@
-import * as React from 'react'
+import React from 'react'
 import * as echarts from 'echarts/lib/echarts'
 import { IDrawingData, IMetricAxisConfig, ILegend } from './Pivot'
 import { IWidgetMetric, DimetionType, RenderType, IChartStyles } from '../Widget'
@@ -62,7 +62,7 @@ interface IChartProps {
   isDrilling?: boolean
   whichDataDrillBrushed?: boolean | object []
   selectedChart: number
-  selectedItems?: string[]
+  selectedItems?: string[] | number[]
   onSelectChartsItems?: (selectedItems: number[]) => void
   // onHideDrillPanel?: (swtich: boolean) => void
 }
@@ -271,7 +271,7 @@ export class Chart extends React.Component<IChartProps, IChartStates> {
                 if (!(currentScatterXAxisItem && m.chart.id === PivotTypes.Scatter)) {
                   grid.push({
                     top: dimetionAxis === 'col' ? (xSum + l * height) : ySum,
-                    left: dimetionAxis === 'col' ? ySum - 1 : (xSum - 1 + l * width),    // 隐藏yaxisline
+                    left: dimetionAxis === 'col' ? ySum - 1 : (xSum - 1 + l * width),    // 隐藏yaxisline
                     width,
                     height
                   })
@@ -313,14 +313,14 @@ export class Chart extends React.Component<IChartProps, IChartStates> {
                         if (dimetionAxis === 'col') {
                           grid.push({
                             top: tempXsum + l * unitMetricHeight,
-                            left: tempYsum - 1,    // 隐藏yaxisline
+                            left: tempYsum - 1,    // 隐藏yaxisline
                             width: elementSize,
                             height: unitMetricHeight
                           })
                         } else {
                           grid.push({
                             top: tempYsum,
-                            left: tempXsum - 1 + l * unitMetricWidth,    // 隐藏yaxisline
+                            left: tempXsum - 1 + l * unitMetricWidth,    // 隐藏yaxisline
                             width: unitMetricWidth,
                             height: elementSize
                           })
@@ -436,14 +436,14 @@ export class Chart extends React.Component<IChartProps, IChartStates> {
                         if (dimetionAxis === 'col') {
                           grid.push({
                             top: tempXsum + l * unitMetricHeight,
-                            left: tempYsum - 1,    // 隐藏yaxisline
+                            left: tempYsum - 1,    // 隐藏yaxisline
                             width: elementSize,
                             height: unitMetricHeight
                           })
                         } else {
                           grid.push({
                             top: tempYsum,
-                            left: tempXsum - 1 + l * unitMetricWidth,    // 隐藏yaxisline
+                            left: tempXsum - 1 + l * unitMetricWidth,    // 隐藏yaxisline
                             width: unitMetricWidth,
                             height: elementSize
                           })
@@ -649,10 +649,6 @@ export class Chart extends React.Component<IChartProps, IChartStates> {
               xSum = 0
             }
           })
-          // console.log(grid)
-          // console.log(xAxis)
-          // console.log(yAxis)
-          // console.log(series)
           const { isDrilling, whichDataDrillBrushed, getDataDrillDetail } = this.props
           const brushedOptions = isDrilling === true ? {
             // brush: {

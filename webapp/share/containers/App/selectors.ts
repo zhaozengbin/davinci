@@ -19,38 +19,64 @@
  */
 
 import { createSelector } from 'reselect'
+import { initialState } from './reducer'
 
-const selectGlobal = (state) => state.get('global')
+const selectGlobal = (state) => state.global || initialState
+
+const makeSelectLoginLoading = () => createSelector(
+  selectGlobal,
+  (globalState) => globalState.loading
+)
 
 const makeSelectLogged = () => createSelector(
   selectGlobal,
-  (globalState) => globalState.get('logged')
+  (globalState) => globalState.logged
 )
 
 const makeSelectLoginUser = () => createSelector(
   selectGlobal,
-  (globalState) => globalState.get('loginUser')
+  (globalState) => globalState.loginUser
 )
 
-const makeSelectLocationState = () => {
-  let prevRoutingState
-  let prevRoutingStateJS
-
-  return (state) => {
-    const routingState = state.get('route') // or state.route
-
-    if (!routingState.equals(prevRoutingState)) {
-      prevRoutingState = routingState
-      prevRoutingStateJS = routingState.toJS()
-    }
-
-    return prevRoutingStateJS
+const makeSelectShareType = () => createSelector(
+  selectGlobal,
+  (globalState) => {
+    return globalState.shareType
   }
-}
+)
+
+const makeSelectVizType = () => createSelector(
+  selectGlobal,
+  (globalState) => {
+    return globalState.vizType
+  }
+)
+
+const makeSelectPermission = () => createSelector(
+  selectGlobal,
+  (globalState) => {
+    return globalState.download
+  }
+)
+
+const makeSelectPermissionLoading = () => createSelector(
+  selectGlobal,
+  (globalState) => {
+    return globalState.permissionLoading
+  }
+)
+
+
+
+
 
 export {
   selectGlobal,
+  makeSelectLoginLoading,
   makeSelectLogged,
   makeSelectLoginUser,
-  makeSelectLocationState
+  makeSelectShareType,
+  makeSelectVizType,
+  makeSelectPermission,
+  makeSelectPermissionLoading
 }

@@ -23,18 +23,18 @@ import com.alibaba.druid.util.StringUtils;
 import edp.core.utils.CollectionUtils;
 import edp.core.utils.SqlUtils;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
-import java.util.regex.Matcher;
 import java.util.stream.Collectors;
 
 import static edp.core.consts.Consts.*;
 
+@EqualsAndHashCode(callSuper = true)
 @Data
-public class ViewExecuteParam {
+public class ViewExecuteParam extends ConcurrencyStrategy{
     private List<String> groups;
     private List<Aggregator> aggregators;
     private List<Order> orders;
@@ -99,24 +99,23 @@ public class ViewExecuteParam {
         List<Order> list = null;
         if (!CollectionUtils.isEmpty(orders)) {
             list = new ArrayList<>();
-            Iterator<Order> iterator = this.orders.iterator();
-            while (iterator.hasNext()) {
-                Order order = iterator.next();
+            String prefix = SqlUtils.getKeywordPrefix(jdbcUrl, dbVersion);
+            String suffix = SqlUtils.getKeywordSuffix(jdbcUrl, dbVersion);
+
+            for (Order order : this.orders) {
                 String column = order.getColumn().trim();
-                Matcher matcher = PATTERN_SQL_AGGREGATE.matcher(order.getColumn().trim().toLowerCase());
-                if (!matcher.find()) {
-                    String prefix = SqlUtils.getKeywordPrefix(jdbcUrl, dbVersion);
-                    String suffix = SqlUtils.getKeywordSuffix(jdbcUrl, dbVersion);
-                    StringBuilder columnBuilder = new StringBuilder();
-                    if (!column.startsWith(prefix)) {
-                        columnBuilder.append(prefix);
-                    }
-                    columnBuilder.append(column);
-                    if (!column.endsWith(suffix)) {
-                        columnBuilder.append(suffix);
-                    }
-                    order.setColumn(columnBuilder.toString());
+//                Matcher matcher = PATTERN_SQL_AGGREGATE.matcher(order.getColumn().trim().toLowerCase());
+//                if (!matcher.find()) {
+                StringBuilder columnBuilder = new StringBuilder();
+                if (!column.startsWith(prefix)) {
+                    columnBuilder.append(prefix);
                 }
+                columnBuilder.append(column);
+                if (!column.endsWith(suffix)) {
+                    columnBuilder.append(suffix);
+                }
+                order.setColumn(columnBuilder.toString());
+//                }
                 list.add(order);
             }
         }

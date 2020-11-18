@@ -21,18 +21,20 @@ package edp.davinci.dao;
 
 import edp.davinci.dto.userDto.UserBaseInfo;
 import edp.davinci.model.User;
+
+import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.Set;
 
 @Component
 public interface UserMapper {
 
     int insert(User user);
-
 
     @Select({"select * from `user` where id = #{id}"})
     User getById(@Param("id") Long id);
@@ -43,9 +45,7 @@ public interface UserMapper {
     @Select({"select * from `user` where `email` = #{email}"})
     User selectByEmail(@Param("email") String email);
 
-
     List<UserBaseInfo> getUsersByKeyword(@Param("keyword") String keyword, @Param("orgId") Long orgId);
-
 
     @Update({"update `user` set `name` = #{name}, description = #{description}, department = #{department}, update_time = #{updateTime}",
             "where id = #{id}"})
@@ -68,7 +68,16 @@ public interface UserMapper {
     @Select({"select count(id) from `user` where `email` = #{email}"})
     boolean existEmail(@Param("email") String email);
 
-
     @Select({"select count(id) from `user` where `username` = #{username}"})
     boolean existUsername(@Param("username") String username);
+    
+    /**
+     * only for test
+     * @param id
+     * @return
+     */
+    @Delete({"delete from `user` where id = #{id}"})
+    int deleteById(@Param("id") Long id);
+
+    List<User> selectByEmails(@Param("emails") Set<String> emails);
 }

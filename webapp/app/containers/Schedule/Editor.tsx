@@ -23,7 +23,7 @@ import moment, { Moment } from 'moment'
 import Helmet from 'react-helmet'
 import { connect } from 'react-redux'
 import { compose } from 'redux'
-import { RouteComponentProps } from 'react-router'
+import { RouteComponentWithParams } from 'utils/types'
 import injectReducer from 'utils/injectReducer'
 import injectSaga from 'utils/injectSaga'
 import { createStructuredSelector } from 'reselect'
@@ -33,20 +33,19 @@ import {
   makeSelectSuggestMails,
   makeSelectPortalDashboards
 } from './selectors'
-import { makeSelectDisplays } from 'containers/Display/selectors'
-import { makeSelectPortals } from 'containers/Portal/selectors'
+import {
+  makeSelectPortals,
+  makeSelectDisplays,
+  makeSelectDisplaySlides
+} from 'containers/Viz/selectors'
 import { checkNameUniqueAction } from 'containers/App/actions'
 import { ScheduleActions } from './actions'
 import { hideNavigator } from 'containers/App/actions'
-import { DisplayActions } from 'containers/Display/actions'
-import { loadPortals } from 'containers/Portal/actions'
-import { loadDashboards } from 'containers/Dashboard/actions'
+import { VizActions } from 'containers/Viz/actions'
 import reducer from './reducer'
-import saga from './sagas'
-import displayReducer from 'containers/Display/reducer'
-import displaySaga from 'containers/Display/sagas'
-import portalReducer from 'containers/Portal/reducer'
-import portalSaga from 'containers/Portal/sagas'
+import saga, { editSchedule } from './sagas'
+import vizReducer from 'containers/Viz/reducer'
+import vizSaga from 'containers/Viz/sagas'
 import dashboardSaga from 'containers/Dashboard/sagas'
 
 import { Row, Col, Card, Button, Icon, Tooltip, message } from 'antd'
@@ -57,21 +56,29 @@ import ScheduleBaseConfig, {
 } from './components/ScheduleBaseConfig'
 import ScheduleMailConfig from './components/ScheduleMailConfig'
 import ScheduleVizConfig from './components/ScheduleVizConfig'
-import { IRouteParams } from 'app/routes'
-import { IDashboard } from 'containers/Dashboard'
-import { IDisplay } from 'containers/Display/types'
-import { IPortal } from 'containers/Portal'
-import { IProject } from 'containers/Projects'
+import {
+  IPortal,
+  IDashboard,
+  IDisplayFormed,
+  ISlideFormed
+} from 'containers/Viz/types'
+import { IProject } from 'containers/Projects/types'
 import { ISchedule, IScheduleLoading } from './types'
 import {
   IUserInfo,
   IScheduleMailConfig,
   SchedulePeriodUnit,
-  ICronExpressionPartition
+  ICronExpressionPartition,
+  IScheduleVizConfigItem,
+  IScheduleWeChatWorkConfig,
+  JobType
 } from './components/types'
+import { serialize } from 'components/RichText/Serializer'
+import { RichTextNode } from 'app/components/RichText'
 
 import Styles from './Schedule.less'
 import StylesHeader from 'components/EditorHeader/EditorHeader.less'
+import ScheduleWeChatWorkConfig from './components/ScheduleWeChatWorkConfig'
 
 const getCronExpressionByPartition = (partition: ICronExpressionPartition) => {
   const { periodUnit, minute, hour, day, weekDay, month } = partition
@@ -100,9 +107,10 @@ const getCronExpressionByPartition = (partition: ICronExpressionPartition) => {
 }
 
 interface IScheduleEditorStateProps {
-  displays: IDisplay[]
+  displays: IDisplayFormed[]
   portals: IPortal[]
   portalDashboards: { [key: number]: IDashboard[] }
+  displaySlides: { [key: number]: ISlideFormed[] }
   loading: IScheduleLoading
   editingSchedule: ISchedule
   suggestMails: IUserInfo[]
@@ -113,6 +121,7 @@ interface IScheduleEditorDispatchProps {
   onHideNavigator: () => void
   onLoadDisplays: (projectId: number) => void
   onLoadPortals: (projectId: number) => void
+  onLoadDisplaySlides: (displayId: number) => void
   onLoadDashboards: (portalId: number) => void
   onLoadScheduleDetail: (scheduleId: number) => void
   onAddSchedule: (schedule: ISchedule, resolve: () => void) => any
@@ -124,11 +133,12 @@ interface IScheduleEditorDispatchProps {
     reject: (error: string) => any
   ) => any
   onLoadSuggestMails: (keyword: string) => any
+  onChangeJobType: (jobType: JobType) => any
 }
 
 type ScheduleEditorProps = IScheduleEditorStateProps &
   IScheduleEditorDispatchProps &
-  RouteComponentProps<{}, IRouteParams>
+  RouteComponentWithParams
 
 const ScheduleEditor: React.FC<ScheduleEditorProps> = (props) => {
   const {
@@ -137,10 +147,10 @@ const ScheduleEditor: React.FC<ScheduleEditorProps> = (props) => {
     onLoadPortals,
     onLoadScheduleDetail,
     onResetState,
-    params,
-    router
+    match,
+    history
   } = props
-  const { pid: projectId, scheduleId } = params
+  const { projectId, scheduleId } = match.params
   useEffect(() => {
     onHideNavigator()
     onLoadDisplays(+projectId)
@@ -154,51 +164,76 @@ const ScheduleEditor: React.FC<ScheduleEditorProps> = (props) => {
     }
   }, [])
   const goBack = useCallback(() => {
-    router.push(`/project/${projectId}/schedules`)
+    history.push(`/project/${projectId}/schedules`)
   }, [])
 
-  const { portals, loading, editingSchedule, onLoadDashboards } = props
+  const {
+    portals,
+    displays,
+    loading,
+    editingSchedule,
+    onLoadDisplaySlides,
+    onLoadDashboards
+  } = props
 
-  useEffect(
-    () => {
-      if (!editingSchedule.id || !Array.isArray(portals)) {
+  const loadVizDetail = useCallback(
+    (
+      type: IScheduleVizConfigItem['contentType'],
+      schedule: ISchedule,
+      vizs: IPortal[] | IDisplayFormed[]
+    ) => {
+      if (!schedule.id || !vizs.length) {
         return
       }
-      const { contentList } = editingSchedule.config
-      // initial Dashboards loading by contentList Portal setting
-      contentList
-        .filter(({ contentType }) => contentType === 'portal')
-        .forEach(({ id }) => {
-          if (~portals.findIndex((portal) => portal.id === id)) {
-            onLoadDashboards(id)
+      const { contentList } = schedule.config
+      // initial Viz loading by contentList Portal or Display setting
+      contentList.forEach(({ contentType, id: vizId }) => {
+        if (contentType !== type) {
+          return
+        }
+        if (~vizs.findIndex(({ id }) => id === vizId)) {
+          switch (type) {
+            case 'portal':
+              onLoadDashboards(vizId)
+              break
+            case 'display':
+              onLoadDisplaySlides(vizId)
+              break
           }
-        })
+        }
+      })
     },
-    [portals, editingSchedule]
+    []
   )
 
+  useEffect(() => {
+    loadVizDetail('portal', editingSchedule, portals)
+  }, [portals, editingSchedule])
+  useEffect(() => {
+    loadVizDetail('display', editingSchedule, displays)
+  }, [displays, editingSchedule])
+
   const {
-    displays,
     suggestMails,
     portalDashboards,
+    displaySlides,
     onAddSchedule,
     onEditSchedule,
     onCheckUniqueName,
-    onLoadSuggestMails
+    onLoadSuggestMails,
+    onChangeJobType
   } = props
   const { jobStatus, config } = editingSchedule
   const { contentList } = config
 
   const [localContentList, setLocalContentList] = useState(contentList)
-  useEffect(
-    () => {
-      setLocalContentList([...contentList])
-    },
-    [contentList]
-  )
+  useEffect(() => {
+    setLocalContentList([...contentList])
+  }, [contentList])
 
   let baseConfigForm: FormComponentProps<ScheduleBaseFormProps> = null
   let mailConfigForm: FormComponentProps<IScheduleMailConfig> = null
+  let weChatWorkConfigForm: FormComponentProps<IScheduleWeChatWorkConfig> = null
 
   const saveSchedule = () => {
     if (!localContentList.length) {
@@ -209,33 +244,54 @@ const ScheduleEditor: React.FC<ScheduleEditorProps> = (props) => {
       if (err1) {
         return
       }
-      const cronExpression = getCronExpressionByPartition(value1)
+      const { setCronExpressionManually, ...scheduleBase } = value1
       const [startDate, endDate] = baseConfigForm.form.getFieldValue(
         'dateRange'
       ) as ScheduleBaseFormProps['dateRange']
-      delete value1.dateRange
-      mailConfigForm.form.validateFieldsAndScroll((err2, value2) => {
-        if (err2) {
-          return
-        }
-        const schedule: ISchedule = {
-          ...value1,
-          cronExpression,
-          startDate: moment(startDate).format('YYYY-MM-DD HH:mm:ss'),
-          endDate: moment(endDate).format('YYYY-MM-DD HH:mm:ss'),
-          config: { ...value2, contentList: localContentList },
-          projectId: +projectId
-        }
-        if (editingSchedule.id) {
-          schedule.id = editingSchedule.id
-          onEditSchedule(schedule, goBack)
-        } else {
-          onAddSchedule(schedule, goBack)
-        }
-      })
+      delete scheduleBase.dateRange
+      const schedule: ISchedule = {
+        ...scheduleBase,
+        cronExpression: setCronExpressionManually
+          ? scheduleBase.cronExpression
+          : getCronExpressionByPartition(scheduleBase),
+        startDate: moment(startDate).format('YYYY-MM-DD HH:mm:ss'),
+        endDate: moment(endDate).format('YYYY-MM-DD HH:mm:ss'),
+        projectId: +projectId
+      }
+      if (editingSchedule.jobType === 'email') {
+        mailConfigForm.form.validateFieldsAndScroll((err2, value2) => {
+          if (err2) {
+            return
+          }
+          schedule.config = {
+            ...value2,
+            contentList: localContentList,
+            setCronExpressionManually
+          }
+          schedule.config.content = serialize(
+            schedule.config.content as RichTextNode[]
+          )
+        })
+      } else {
+        weChatWorkConfigForm.form.validateFieldsAndScroll((err3, value3) => {
+          if (err3) {
+            return
+          }
+          schedule.config = {
+            ...value3,
+            contentList: localContentList,
+            setCronExpressionManually
+          }
+        })
+      }
+      if (editingSchedule.id) {
+        schedule.id = editingSchedule.id
+        onEditSchedule(schedule, goBack)
+      } else {
+        onAddSchedule(schedule, goBack)
+      }
     })
   }
-
   return (
     <>
       <Helmet title="Schedule" />
@@ -273,19 +329,35 @@ const ScheduleEditor: React.FC<ScheduleEditorProps> = (props) => {
                   schedule={editingSchedule}
                   loading={loading.schedule}
                   onCheckUniqueName={onCheckUniqueName}
+                  onChangeJobType={onChangeJobType}
                 />
               </Card>
-              <Card title="邮件设置" size="small" style={{ marginTop: 8 }}>
-                <ScheduleMailConfig
-                  wrappedComponentRef={(inst) => {
-                    mailConfigForm = inst
-                  }}
-                  config={config}
-                  loading={loading.schedule}
-                  mailList={suggestMails}
-                  onLoadMailList={onLoadSuggestMails}
-                />
-              </Card>
+              {editingSchedule.jobType === 'email' ? (
+                <Card title="邮件设置" size="small" style={{ marginTop: 8 }}>
+                  <ScheduleMailConfig
+                    wrappedComponentRef={(inst) => {
+                      mailConfigForm = inst
+                    }}
+                    config={config as IScheduleMailConfig}
+                    loading={loading.schedule}
+                    mailList={suggestMails}
+                    onLoadMailList={onLoadSuggestMails}
+                  />
+                </Card>
+              ) : (
+                <Card
+                  title="企业微信设置"
+                  size="small"
+                  style={{ marginTop: 8 }}
+                >
+                  <ScheduleWeChatWorkConfig
+                    wrappedComponentRef={(inst) => {
+                      weChatWorkConfigForm = inst
+                    }}
+                    config={config as IScheduleWeChatWorkConfig}
+                  />
+                </Card>
+              )}
             </Col>
             <Col span={12}>
               <Card title="发送内容设置" size="small">
@@ -293,7 +365,9 @@ const ScheduleEditor: React.FC<ScheduleEditorProps> = (props) => {
                   displays={displays}
                   portals={portals}
                   portalDashboards={portalDashboards}
+                  displaySlides={displaySlides}
                   value={localContentList}
+                  onLoadDisplaySlides={onLoadDisplaySlides}
                   onLoadPortalDashboards={onLoadDashboards}
                   onChange={setLocalContentList}
                 />
@@ -310,6 +384,7 @@ const mapStateToProps = createStructuredSelector({
   displays: makeSelectDisplays(),
   portals: makeSelectPortals(),
   portalDashboards: makeSelectPortalDashboards(),
+  displaySlides: makeSelectDisplaySlides(),
   loading: makeSelectLoading(),
   editingSchedule: makeSelectEditingSchedule(),
   suggestMails: makeSelectSuggestMails()
@@ -317,14 +392,20 @@ const mapStateToProps = createStructuredSelector({
 
 const mapDispatchToProps = (dispatch) => ({
   onHideNavigator: () => dispatch(hideNavigator()),
-  onLoadDisplays: (projectId) =>
-    dispatch(DisplayActions.loadDisplays(projectId)),
-  onLoadPortals: (projectId) => dispatch(loadPortals(projectId)),
+  onLoadDisplays: (projectId) => dispatch(VizActions.loadDisplays(projectId)),
+  onLoadPortals: (projectId) => dispatch(VizActions.loadPortals(projectId)),
+  onLoadDisplaySlides: (displayId) =>
+    dispatch(VizActions.loadDisplaySlides(displayId)),
+  // @REFACTOR to use viz reducer portalDashboards
   onLoadDashboards: (portalId) =>
     dispatch(
-      loadDashboards(portalId, (dashboards) => {
-        dispatch(ScheduleActions.portalDashboardsLoaded(portalId, dashboards))
-      })
+      VizActions.loadPortalDashboards(
+        portalId,
+        (dashboards) => {
+          dispatch(ScheduleActions.portalDashboardsLoaded(portalId, dashboards))
+        },
+        false
+      )
     ),
   onLoadScheduleDetail: (scheduleId) =>
     dispatch(ScheduleActions.loadScheduleDetail(scheduleId)),
@@ -336,34 +417,26 @@ const mapDispatchToProps = (dispatch) => ({
   onCheckUniqueName: (data, resolve, reject) =>
     dispatch(checkNameUniqueAction('cronjob', data, resolve, reject)),
   onLoadSuggestMails: (keyword) =>
-    dispatch(ScheduleActions.loadSuggestMails(keyword))
+    dispatch(ScheduleActions.loadSuggestMails(keyword)),
+  onChangeJobType: (jobType) =>
+    dispatch(ScheduleActions.changeScheduleJobType(jobType))
 })
 
-const withConnect = connect(
-  mapStateToProps,
-  mapDispatchToProps
-)
+const withConnect = connect(mapStateToProps, mapDispatchToProps)
 const withReducer = injectReducer({ key: 'schedule', reducer })
 const withSaga = injectSaga({ key: 'schedule', saga })
-const withDisplayReducer = injectReducer({
-  key: 'display',
-  reducer: displayReducer
+const withVizReducer = injectReducer({
+  key: 'viz',
+  reducer: vizReducer
 })
-const withDisplaySaga = injectSaga({ key: 'display', saga: displaySaga })
-const withPortalReducer = injectReducer({
-  key: 'portal',
-  reducer: portalReducer
-})
-const withPortalSaga = injectSaga({ key: 'portal', saga: portalSaga })
+const withVizSaga = injectSaga({ key: 'viz', saga: vizSaga })
 const withDashboardSaga = injectSaga({ key: 'dashboard', saga: dashboardSaga })
 
 export default compose(
   withReducer,
   withSaga,
-  withDisplayReducer,
-  withDisplaySaga,
-  withPortalReducer,
-  withPortalSaga,
+  withVizReducer,
+  withVizSaga,
   withDashboardSaga,
   withConnect
 )(ScheduleEditor)

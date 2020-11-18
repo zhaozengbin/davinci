@@ -18,6 +18,11 @@
  * >>
  */
 
+export const CLIENT_VERSION = '0.3-rc'
+export const API_HOST = '/api/v3'
+export const SHARE_HOST = `${location.origin}/share.html`
+export const EXTERNAL_LOG_OUT_URL = '/login/oauth2/logout'
+
 const defaultEchartsTheme = require('assets/json/echartsThemes/default.project.json')
 export const DEFAULT_ECHARTS_THEME = defaultEchartsTheme.theme
 export const DEFAULT_PRIMARY_COLOR = '#1B98E0'
@@ -27,9 +32,6 @@ export const GRID_BREAKPOINTS = { lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }
 export const GRID_COLS = { lg: 12, md: 12, sm: 12, xs: 2, xxs: 2 }
 export const GRID_ITEM_MARGIN = 16
 export const GRID_ROW_HEIGHT = 30
-
-export const DEFAULT_BASELINE_THICKNESS = 1.5
-export const DEFAULT_BASELINE_COLOR = '#ecc302'
 
 export const TABLE_HEADER_HEIGHT = 50
 export const TABLE_PAGINATION_HEIGHT = 61
@@ -205,5 +207,6 @@ export const DEFAULT_FONT_FAMILY = '"Chinese Quote", -apple-system, BlinkMacSyst
 export const DEFAULT_DATE_FORMAT = 'YYYY-MM-DD'
 export const DEFAULT_DATETIME_FORMAT = 'YYYY-MM-DD HH:mm:ss'
 
-export const DOWNLOAD_LIST_POLLING_FREQUENCY = 30000
-export const DEFAULT_CACHE_EXPIRED = 300
+export const DEFAULT_JWT_TOKEN_EXPIRED = 60 * 60 * 1000 // ms
+export const DOWNLOAD_LIST_POLLING_FREQUENCY = 30000  // ms
+export const DEFAULT_CACHE_EXPIRED = 300  // sec

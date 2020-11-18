@@ -27,6 +27,8 @@ import java.util.List;
 @Data
 public class MemDashboardWidgetCreate {
 
+    private String alias;
+
     @Min(value = 1L, message = "Invalid dashboard id")
     private Long dashboardId;
 
@@ -40,7 +42,7 @@ public class MemDashboardWidgetCreate {
     @Min(value = 0, message = "Invalid width")
     private Integer width;
 
-    @Min(value = 0, message = "Invalid heidget")
+    @Min(value = 0, message = "Invalid height")
     private Integer height;
 
     private Boolean polling = false;

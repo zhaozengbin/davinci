@@ -25,7 +25,8 @@ import { connect } from 'react-redux'
 import { createStructuredSelector } from 'reselect'
 import memoizeOne from 'memoize-one'
 import Helmet from 'react-helmet'
-import { Link, RouteComponentProps } from 'react-router'
+import { Link } from 'react-router-dom'
+import { RouteComponentWithParams } from 'utils/types'
 
 import injectReducer from 'utils/injectReducer'
 import injectSaga from 'utils/injectSaga'
@@ -43,14 +44,13 @@ import { initializePermission } from '../Account/components/checkUtilPermission'
 import { Table, Tooltip, Button, Row, Col, Breadcrumb, Icon, Popconfirm, message } from 'antd'
 import { ColumnProps, PaginationConfig, SorterResult } from 'antd/lib/table'
 import { ButtonProps } from 'antd/lib/button'
-import Container from 'components/Container'
+import Container, { ContainerTitle, ContainerBody } from 'components/Container'
 import Box from 'components/Box'
 import SearchFilterDropdown from 'components/SearchFilterDropdown'
 import CopyModal from './components/CopyModal'
 
-import { IRouteParams } from 'app/routes'
 import { IViewBase, IView, IViewLoading } from './types'
-import { IProject } from '../Projects'
+import { IProject } from '../Projects/types'
 
 import utilStyles from 'assets/less/util.less'
 
@@ -67,7 +67,7 @@ interface IViewListDispatchProps {
   onCheckName: (data, resolve, reject) => void
 }
 
-type IViewListProps = IViewListStateProps & IViewListDispatchProps & RouteComponentProps<{}, IRouteParams>
+type IViewListProps = IViewListStateProps & IViewListDispatchProps & RouteComponentWithParams
 
 interface IViewListStates {
   screenWidth: number
@@ -99,8 +99,8 @@ export class ViewList extends React.PureComponent<IViewListProps, IViewListState
   }
 
   private loadViews = () => {
-    const { onLoadViews, params } = this.props
-    const { pid: projectId } = params
+    const { onLoadViews, match } = this.props
+    const { projectId } = match.params
     if (projectId) {
       onLoadViews(+projectId)
     }
@@ -228,8 +228,8 @@ export class ViewList extends React.PureComponent<IViewListProps, IViewListState
   }
 
   private addView = () => {
-    const { router, params } = this.props
-    router.push(`/project/${params.pid}/view`)
+    const { history, match } = this.props
+    history.push(`/project/${match.params.projectId}/view`)
   }
 
   private copyView = (fromView: IViewBase) => () => {
@@ -254,8 +254,8 @@ export class ViewList extends React.PureComponent<IViewListProps, IViewListState
   }
 
   private editView = (viewId: number) => () => {
-    const { router, params } = this.props
-    router.push(`/project/${params.pid}/view/${viewId}`)
+    const { history, match } = this.props
+    history.push(`/project/${match.params.projectId}/view/${viewId}`)
   }
 
   private deleteView = (viewId: number) => () => {
@@ -287,7 +287,7 @@ export class ViewList extends React.PureComponent<IViewListProps, IViewListState
       <>
         <Container>
           <Helmet title="View" />
-          <Container.Title>
+          <ContainerTitle>
             <Row>
               <Col span={24}>
                 <Breadcrumb className={utilStyles.breadcrumb}>
@@ -297,8 +297,8 @@ export class ViewList extends React.PureComponent<IViewListProps, IViewListState
                 </Breadcrumb>
               </Col>
             </Row>
-          </Container.Title>
-          <Container.Body>
+          </ContainerTitle>
+          <ContainerBody>
             <Box>
               <Box.Header>
                 <Box.Title>
@@ -327,7 +327,7 @@ export class ViewList extends React.PureComponent<IViewListProps, IViewListState
                 </Row>
               </Box.Body>
             </Box>
-          </Container.Body>
+          </ContainerBody>
         </Container>
         <CopyModal
           visible={copyModalVisible}
@@ -356,7 +356,7 @@ const mapStateToProps = createStructuredSelector({
   loading: makeSelectLoading()
 })
 
-const withConnect = connect<IViewListStateProps, IViewListDispatchProps, RouteComponentProps<{}, IRouteParams>>(mapStateToProps, mapDispatchToProps)
+const withConnect = connect<IViewListStateProps, IViewListDispatchProps, RouteComponentWithParams>(mapStateToProps, mapDispatchToProps)
 const withReducer = injectReducer({ key: 'view', reducer })
 const withSaga = injectSaga({ key: 'view', saga: sagas })
 

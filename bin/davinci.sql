@@ -20,7 +20,7 @@ CREATE TABLE `cron_job`
     `exec_log`        text COLLATE utf8_unicode_ci,
     `create_by`       bigint(20)                          NOT NULL,
     `create_time`     timestamp                           NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    `update_by`       varchar(20) COLLATE utf8_unicode_ci          DEFAULT NULL,
+    `update_by`       bigint(20)                                   DEFAULT NULL,
     `update_time`     timestamp                           NULL     DEFAULT NULL,
     `parent_id`       bigint(20)                                   DEFAULT NULL,
     `full_parent_id`  varchar(255) COLLATE utf8_unicode_ci         DEFAULT NULL,
@@ -89,6 +89,7 @@ CREATE TABLE `display`
     `project_id`  bigint(20)   NOT NULL,
     `avatar`      varchar(255) DEFAULT NULL,
     `publish`     tinyint(1)   NOT NULL,
+    `config`      text         NULL,
     `create_by`   bigint(20)   DEFAULT NULL,
     `create_time` datetime     DEFAULT NULL,
     `update_by`   bigint(20)   DEFAULT NULL,
@@ -157,6 +158,7 @@ DROP TABLE IF EXISTS `mem_dashboard_widget`;
 CREATE TABLE `mem_dashboard_widget`
 (
     `id`           bigint(20) NOT NULL AUTO_INCREMENT,
+    `alias`        varchar(30) NULL,
     `dashboard_id` bigint(20) NOT NULL,
     `widget_Id`    bigint(20)          DEFAULT NULL,
     `x`            int(12)    NOT NULL,
@@ -218,8 +220,8 @@ CREATE TABLE `organization`
     `member_permission`    smallint(1)  NOT NULL DEFAULT '0',
     `create_time`          timestamp    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `create_by`            bigint(20)   NOT NULL DEFAULT '0',
-    `update_time`          timestamp    NULL     DEFAULT NULL,
-    `update_by`            bigint(20)            DEFAULT '0',
+    `update_time`          timestamp    NULL,
+    `update_by`            bigint(20)            DEFAULT NULL,
     PRIMARY KEY (`id`) USING BTREE
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8;
@@ -427,6 +429,10 @@ CREATE TABLE `rel_user_organization`
     `org_id`  bigint(20)  NOT NULL,
     `user_id` bigint(20)  NOT NULL,
     `role`    smallint(1) NOT NULL DEFAULT '0',
+    `create_by`   bigint(20)   DEFAULT NULL,
+    `create_time` datetime     DEFAULT NULL,
+    `update_by`   bigint(20)   DEFAULT NULL,
+    `update_time` datetime     DEFAULT NULL,
     PRIMARY KEY (`id`) USING BTREE,
     UNIQUE KEY `idx_org_user` (`org_id`, `user_id`) USING BTREE
 ) ENGINE = InnoDB
@@ -512,8 +518,8 @@ CREATE TABLE `user`
     `avatar`      varchar(255)          DEFAULT NULL,
     `create_time` timestamp    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `create_by`   bigint(20)   NOT NULL DEFAULT '0',
-    `update_time` timestamp    NOT NULL DEFAULT '1970-01-01 08:00:01',
-    `update_by`   bigint(20)   NOT NULL DEFAULT '0',
+    `update_time` timestamp    NULL,
+    `update_by`   bigint(20)            DEFAULT NULL,
     PRIMARY KEY (`id`) USING BTREE
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8;
@@ -625,7 +631,7 @@ CREATE TABLE `davinci_statistic_visitor_operation` (
   `groups` varchar(500) DEFAULT NULL,
   `create_time` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`id`) USING BTREE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 DROP TABLE IF EXISTS `davinci_statistic_terminal`;
 CREATE TABLE `davinci_statistic_terminal` (
@@ -644,18 +650,27 @@ CREATE TABLE `davinci_statistic_terminal` (
   `cpu_architecture` varchar(255) DEFAULT NULL,
   `create_time` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`id`) USING BTREE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 
 DROP TABLE IF EXISTS `davinci_statistic_duration`;
-CREATE TABLE `davinci_statistic_duration` (
-  `id` bigint(20) NOT NULL AUTO_INCREMENT,
-  `user_id` bigint(20) DEFAULT NULL,
-  `email` varchar(255) DEFAULT NULL,
-  `start_time` timestamp NULL DEFAULT NULL,
-  `end_time` timestamp NULL DEFAULT NULL,
-  PRIMARY KEY (`id`) USING BTREE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+CREATE TABLE `davinci_statistic_duration`
+(
+    `id`         bigint(20) NOT NULL AUTO_INCREMENT,
+    `user_id`    bigint(20)      DEFAULT NULL,
+    `email`      varchar(255)    DEFAULT NULL,
+    `org_id` bigint(20) DEFAULT NULL COMMENT '报表关联组织ID',
+    `project_id` bigint(20) DEFAULT NULL COMMENT '报表关联项目ID',
+    `project_name` varchar(255) DEFAULT NULL COMMENT '报表关联项目名称',
+    `viz_type` varchar(10) DEFAULT NULL COMMENT '报表关联应用类型（dashboard/display）',
+    `viz_id` bigint(20) DEFAULT NULL COMMENT '报表关联应用ID',
+    `viz_name` varchar(255) DEFAULT NULL COMMENT '报表关联应用名称',
+    `sub_viz_id` bigint(20) DEFAULT NULL COMMENT '报表ID',
+    `sub_viz_name` varchar(255) DEFAULT NULL COMMENT '报表名称',
+    `start_time` timestamp  NULL DEFAULT NULL,
+    `end_time`   timestamp  NULL DEFAULT NULL,
+    PRIMARY KEY (`id`) USING BTREE
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;
 
 DROP TABLE IF EXISTS `share_download_record`;
 CREATE TABLE `share_download_record` (
@@ -671,3 +686,13 @@ CREATE TABLE `share_download_record` (
 
 
 SET FOREIGN_KEY_CHECKS = 1;
+
+
+INSERT INTO `user` (`id`, `email`, `username`, `password`, `admin`, `active`, `name`, `description`, `department`, `avatar`, `create_time`, `create_by`, `update_by`, `update_time`)
+VALUES (1, 'guest@davinci.cn', 'guest', '$2a$10$RJKb4jhMgRYnGPlVRV036erxQ3oGZ8NnxZrlrrBJJha9376cAuTRO', 1, 1, NULL, NULL, NULL, NULL, '2020-01-01 00:00:00', 0, NULL, NULL);
+
+INSERT INTO `organization` (`id`, `name`, `description`, `avatar`, `user_id`, `project_num`, `member_num`, `role_num`, `allow_create_project`, `member_permission`, `create_time`, `create_by`, `update_time`, `update_by`)
+VALUES (1, 'guest\'s Organization', NULL, NULL, 1, 0, 1, 0, 1, 1, '2020-01-01 00:00:00', 1, NULL, NULL);
+
+INSERT INTO `rel_user_organization` (`id`, `org_id`, `user_id`, `role`, `create_by`, `create_time`, `update_by`, `update_time`)
+VALUES (1, 1, 1, 1, 1, '2020-01-01 00:00:00', NULL, NULL);

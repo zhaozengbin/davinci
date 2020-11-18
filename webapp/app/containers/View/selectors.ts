@@ -21,7 +21,7 @@
 import { createSelector } from 'reselect'
 import { IViewState } from './types'
 
-const selectView = (state) => state.get('view')
+const selectView = (state) => state.view
 
 const makeSelectViews = () => createSelector(
   selectView,
@@ -86,6 +86,11 @@ const makeSelectBizs = () => createSelector(
   (viewState: IViewState) => viewState.bizs
 )
 
+const makeSelectIsLastExecuteWholeSql = () => createSelector(
+  selectView,
+  (viewState: IViewState) => viewState.isLastExecuteWholeSql
+)
+
 export {
   selectView,
   makeSelectViews,
@@ -101,5 +106,7 @@ export {
 
   makeSelectChannels,
   makeSelectTenants,
-  makeSelectBizs
+  makeSelectBizs,
+
+  makeSelectIsLastExecuteWholeSql
 }
